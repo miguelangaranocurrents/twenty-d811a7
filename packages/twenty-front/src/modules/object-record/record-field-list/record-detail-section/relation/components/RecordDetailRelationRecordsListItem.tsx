@@ -1,0 +1,285 @@
+import { useObjectMetadataItem } from '@/object-metadata/hooks/useObjectMetadataItem';
+import { useObjectMetadataItems } from '@/object-metadata/hooks/useObjectMetadataItems';
+import { RecordChip } from '@/object-record/components/RecordChip';
+import { useDeleteOneRecord } from '@/object-record/hooks/useDeleteOneRecord';
+import { useObjectPermissionsForObject } from '@/object-record/hooks/useObjectPermissionsForObject';
+import { useUpdateOneRecord } from '@/object-record/hooks/useUpdateOneRecord';
+import { RecordFieldList } from '@/object-record/record-field-list/components/RecordFieldList';
+import { useRecordFieldsScopeContextOrThrow } from '@/object-record/record-field-list/contexts/RecordFieldsScopeContext';
+import { RecordDetailRecordsListItemContainer } from '@/object-record/record-field-list/record-detail-section/components/RecordDetailRecordsListItemContainer';
+import { FieldContext } from '@/object-record/record-field/ui/contexts/FieldContext';
+import { FieldInputEventContext } from '@/object-record/record-field/ui/contexts/FieldInputEventContext';
+import { type FieldRelationMetadata } from '@/object-record/record-field/ui/types/FieldMetadata';
+import { singleRecordPickerSelectedIdComponentState } from '@/object-record/record-picker/single-record-picker/states/singleRecordPickerSelectedIdComponentState';
+import { getRecordFieldCardRelationPickerDropdownId } from '@/object-record/record-show/utils/getRecordFieldCardRelationPickerDropdownId';
+import { type ObjectRecord } from '@/object-record/types/ObjectRecord';
+import { getForeignKeyNameFromRelationFieldName } from '@/object-record/utils/getForeignKeyNameFromRelationFieldName';
+import { ConfirmationDialog } from '@/ui/layout/dialog/components/ConfirmationDialog';
+import { useDialog } from '@/ui/layout/dialog/hooks/useDialog';
+import { DropdownContent } from '@/ui/layout/dropdown/components/DropdownContent';
+import { DropdownRoot } from '@/ui/layout/dropdown/components/DropdownRoot';
+import { GenericDropdownContentWidth } from '@/ui/layout/dropdown/constants/GenericDropdownContentWidth';
+import { useSetAtomComponentState } from '@/ui/utilities/state/jotai/hooks/useSetAtomComponentState';
+import { styled } from '@linaria/react';
+import { t } from '@lingui/core/macro';
+import { Trans } from '@lingui/react/macro';
+import { motion } from 'framer-motion';
+import { useCallback, useContext } from 'react';
+import { createPortal } from 'react-dom';
+import { CoreObjectNameSingular } from 'twenty-shared/types';
+import {
+  CustomError,
+  computeMorphRelationGqlFieldName,
+} from 'twenty-shared/utils';
+import { doNotTranslate } from 'twenty-shared/i18n';
+import { LightIconButton } from 'twenty-ui/components/input';
+import { Dropdown } from 'twenty-ui/components/navigation';
+import {
+  IconChevronDown,
+  IconDotsVertical,
+  IconTrash,
+  IconUnlink,
+  type IconComponent,
+} from 'twenty-ui/icon';
+import { Collapsible } from 'twenty-ui/primitives/layout';
+import { FieldMetadataType, RelationType } from '~/generated-metadata/graphql';
+
+const StyledClickableZone = styled.div`
+  align-items: center;
+  cursor: pointer;
+  display: flex;
+  flex: 1 0 auto;
+  height: 100%;
+  justify-content: flex-end;
+`;
+
+const StyledHoverRevealedAction = styled.div`
+  display: flex;
+`;
+
+const MotionIconChevronDown = motion.create(IconChevronDown);
+
+const getDeleteRelationModalId = (recordId: string) =>
+  `delete-relation-modal-${recordId}`;
+
+type RecordDetailRelationRecordsListItemProps = {
+  isExpanded: boolean;
+  onClick: (relationRecordId: string) => void;
+  relationRecord: ObjectRecord;
+  relationObjectMetadataNameSingular: string;
+  relationFieldMetadataId: string;
+};
+
+export const RecordDetailRelationRecordsListItem = ({
+  isExpanded,
+  onClick,
+  relationRecord,
+  relationObjectMetadataNameSingular,
+  relationFieldMetadataId,
+}: RecordDetailRelationRecordsListItemProps) => {
+  const { scopeInstanceId } = useRecordFieldsScopeContextOrThrow();
+  const {
+    fieldDefinition,
+    recordId,
+    isRecordFieldReadOnly: parentIsRecordFieldReadOnly,
+  } = useContext(FieldContext);
+
+  const { onSubmit } = useContext(FieldInputEventContext);
+
+  const { openDialog } = useDialog();
+
+  const { relationType, objectMetadataNameSingular } =
+    fieldDefinition.metadata as FieldRelationMetadata;
+
+  const { objectMetadataItems } = useObjectMetadataItems();
+  const objectMetadataItem = objectMetadataItems.find(
+    (objectMetadataItemToFind) =>
+      objectMetadataItemToFind.nameSingular === objectMetadataNameSingular,
+  );
+
+  if (!objectMetadataItem) {
+    throw new CustomError(
+      doNotTranslate('Object metadata item not found'),
+      'OBJECT_METADATA_ITEM_NOT_FOUND',
+    );
+  }
+
+  const isToOneObject = relationType === RelationType.MANY_TO_ONE;
+  const { objectMetadataItem: relationObjectMetadataItem } =
+    useObjectMetadataItem({
+      objectNameSingular: relationObjectMetadataNameSingular,
+    });
+
+  const relationObjectLabelSingular = relationObjectMetadataItem.labelSingular;
+
+  const relationObjectPermissions = useObjectPermissionsForObject(
+    relationObjectMetadataItem.id,
+  );
+
+  const { updateOneRecord: updateOneRelationRecord } = useUpdateOneRecord();
+  const { deleteOneRecord: deleteOneRelationRecord } = useDeleteOneRecord({
+    objectNameSingular: relationObjectMetadataNameSingular,
+  });
+
+  const isAccountOwnerRelation =
+    relationObjectMetadataNameSingular ===
+    CoreObjectNameSingular.WorkspaceMember;
+
+  const dropdownInstanceId = `record-field-card-menu:${scopeInstanceId}:${relationFieldMetadataId}:${relationRecord.id}`;
+
+  const dropdownId = getRecordFieldCardRelationPickerDropdownId({
+    fieldDefinition,
+    recordId,
+    instanceId: scopeInstanceId,
+  });
+  const setSingleRecordPickerSelectedId = useSetAtomComponentState(
+    singleRecordPickerSelectedIdComponentState,
+    dropdownId,
+  );
+
+  const relationFieldMetadataItem = relationObjectMetadataItem.fields.find(
+    ({ id }) => id === relationFieldMetadataId,
+  );
+
+  const relationFieldMetadataIsMorphRelation =
+    relationFieldMetadataItem?.type === FieldMetadataType.MORPH_RELATION;
+
+  const computedName = relationFieldMetadataItem
+    ? computeMorphRelationGqlFieldName({
+        fieldName: relationFieldMetadataItem.name,
+        relationType: relationFieldMetadataItem.settings.relationType,
+        targetObjectMetadataNameSingular: objectMetadataItem.nameSingular,
+        targetObjectMetadataNamePlural: objectMetadataItem.namePlural,
+      })
+    : '';
+
+  const updateOneRecordInput = relationFieldMetadataIsMorphRelation
+    ? {
+        [getForeignKeyNameFromRelationFieldName(computedName)]: null,
+      }
+    : {
+        [getForeignKeyNameFromRelationFieldName(
+          relationFieldMetadataItem?.name ?? '',
+        )]: null,
+      };
+
+  const handleDetach = () => {
+    if (!relationFieldMetadataItem?.name) return;
+
+    if (isToOneObject) {
+      onSubmit?.({ newValue: null });
+    } else {
+      updateOneRelationRecord({
+        objectNameSingular: relationObjectMetadataNameSingular,
+        idToUpdate: relationRecord.id,
+        updateOneRecordInput,
+      });
+    }
+
+    setSingleRecordPickerSelectedId(undefined);
+  };
+
+  const handleDelete = () => {
+    openDialog(getDeleteRelationModalId(relationRecord.id));
+  };
+
+  const handleConfirmDelete = async () => {
+    await deleteOneRelationRecord(relationRecord.id);
+  };
+
+  const handleClick = () => onClick(relationRecord.id);
+
+  const AnimatedIconChevronDown = useCallback<IconComponent>(
+    (props) => (
+      <MotionIconChevronDown
+        className={props.className}
+        color={props.color}
+        size={props.size}
+        stroke={props.stroke}
+        initial={{ rotate: isExpanded ? 0 : -180 }}
+        animate={{ rotate: isExpanded ? -180 : 0 }}
+      />
+    ),
+    [isExpanded],
+  );
+
+  return (
+    <>
+      <RecordDetailRecordsListItemContainer data-testid="record-detail-records-list-item">
+        <RecordChip
+          record={relationRecord}
+          objectNameSingular={relationObjectMetadataItem.nameSingular}
+        />
+        <StyledClickableZone onClick={handleClick} data-testid="expand-button">
+          <StyledHoverRevealedAction className="displayOnHover">
+            <LightIconButton emphasis="subtle" aria-label={t`Expand relation`}>
+              <AnimatedIconChevronDown />
+            </LightIconButton>
+          </StyledHoverRevealedAction>
+        </StyledClickableZone>
+        {!parentIsRecordFieldReadOnly && (
+          <DropdownRoot dropdownId={dropdownInstanceId} type="menu">
+            <StyledHoverRevealedAction className="displayOnHover">
+              <Dropdown.Trigger
+                render={
+                  <LightIconButton
+                    emphasis="subtle"
+                    aria-label={t`More options`}
+                  >
+                    <IconDotsVertical />
+                  </LightIconButton>
+                }
+              />
+            </StyledHoverRevealedAction>
+            <DropdownContent
+              side="right"
+              align="start"
+              width={GenericDropdownContentWidth.Medium}
+            >
+              <Dropdown.Section>
+                <Dropdown.ActionItem
+                  startIcon={<IconUnlink />}
+                  onClick={handleDetach}
+                >{t`Detach`}</Dropdown.ActionItem>
+                {!isAccountOwnerRelation &&
+                  relationObjectPermissions.canSoftDeleteObjectRecords && (
+                    <Dropdown.ActionItem
+                      startIcon={<IconTrash />}
+                      color="danger"
+                      onClick={handleDelete}
+                    >{t`Delete`}</Dropdown.ActionItem>
+                  )}
+              </Dropdown.Section>
+            </DropdownContent>
+          </DropdownRoot>
+        )}
+      </RecordDetailRecordsListItemContainer>
+      <Collapsible.Root open={isExpanded}>
+        <Collapsible.Panel containAnimation={false}>
+          <RecordFieldList
+            instanceId={`${scopeInstanceId}-relation-${relationRecord.id}`}
+            objectNameSingular={relationObjectMetadataNameSingular}
+            objectRecordId={relationRecord.id}
+          />
+        </Collapsible.Panel>
+      </Collapsible.Root>
+      {createPortal(
+        <ConfirmationDialog
+          dialogId={getDeleteRelationModalId(relationRecord.id)}
+          title={t`Delete Related ${relationObjectLabelSingular}`}
+          subtitle={
+            <Trans>
+              Are you sure you want to delete this related{' '}
+              {relationObjectLabelSingular}?
+              <br />
+              This action will break all its relationships with other objects.
+            </Trans>
+          }
+          onConfirmClick={handleConfirmDelete}
+          confirmButtonText={t`Delete ${relationObjectLabelSingular}`}
+        />,
+        document.body,
+      )}
+    </>
+  );
+};

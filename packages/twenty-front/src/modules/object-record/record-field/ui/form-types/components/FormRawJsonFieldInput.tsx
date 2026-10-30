@@ -1,0 +1,107 @@
+import { css, cx } from '@linaria/core';
+import { t } from '@lingui/core/macro';
+import { FormFieldInputContainer } from '@/ui/input/components/FormFieldInputContainer';
+import { FormFieldInputInnerContainer } from '@/object-record/record-field/ui/form-types/components/FormFieldInputInnerContainer';
+import { FormFieldInputRowContainer } from '@/object-record/record-field/ui/form-types/components/FormFieldInputRowContainer';
+import { TextVariableEditor } from '@/object-record/record-field/ui/form-types/components/TextVariableEditor';
+import { useTextVariableEditor } from '@/object-record/record-field/ui/form-types/hooks/useTextVariableEditor';
+import { type VariablePickerComponent } from '@/ui/input/types/VariablePickerComponent';
+import { Field } from 'twenty-ui/primitives/input';
+import { useId } from 'react';
+import { isDefined } from 'twenty-shared/utils';
+import { doNotTranslate } from 'twenty-shared/i18n';
+import { turnIntoEmptyStringIfWhitespacesOnly } from '~/utils/string/turnIntoEmptyStringIfWhitespacesOnly';
+
+type FormRawJsonFieldInputProps = {
+  label?: string;
+  error?: string;
+  defaultValue: string | null | undefined;
+  onChange: (value: string | null) => void;
+  onBlur?: () => void;
+  readonly?: boolean;
+  VariablePicker?: VariablePickerComponent;
+  placeholder?: string;
+  className?: string;
+  fullHeight?: boolean;
+};
+
+const fullHeightContainerClassName = css`
+  flex: 1;
+`;
+
+export const FormRawJsonFieldInput = ({
+  label,
+  error,
+  defaultValue,
+  placeholder,
+  onChange,
+  onBlur,
+  readonly,
+  VariablePicker,
+  className,
+  fullHeight = false,
+}: FormRawJsonFieldInputProps) => {
+  const instanceId = useId();
+
+  const editor = useTextVariableEditor({
+    placeholder: placeholder ?? t`Enter a JSON object`,
+    multiline: true,
+    readonly,
+    defaultValue: defaultValue ?? undefined,
+    onUpdate: (editor) => {
+      const text = turnIntoEmptyStringIfWhitespacesOnly(editor.getText());
+
+      if (text === '') {
+        onChange(null);
+
+        return;
+      }
+
+      onChange(text);
+    },
+  });
+
+  const handleVariableTagInsert = (variableName: string) => {
+    if (!isDefined(editor)) {
+      throw new Error(
+        doNotTranslate(
+          'Expected the editor to be defined when a variable is selected',
+        ),
+      );
+    }
+
+    editor.chain().focus().insertVariableTag(variableName).run();
+  };
+
+  if (!isDefined(editor)) {
+    return null;
+  }
+
+  return (
+    <FormFieldInputContainer
+      className={cx(className, fullHeight && fullHeightContainerClassName)}
+    >
+      {label ? <Field.Label>{label}</Field.Label> : null}
+
+      <FormFieldInputRowContainer multiline fullHeight={fullHeight}>
+        <FormFieldInputInnerContainer
+          formFieldInputInstanceId={instanceId}
+          hasRightElement={isDefined(VariablePicker) && !readonly}
+          multiline
+          onBlur={onBlur}
+        >
+          <TextVariableEditor editor={editor} multiline readonly={readonly} />
+        </FormFieldInputInnerContainer>
+
+        {VariablePicker && !readonly && (
+          <VariablePicker
+            instanceId={instanceId}
+            multiline
+            onVariableSelect={handleVariableTagInsert}
+          />
+        )}
+      </FormFieldInputRowContainer>
+      {error && <Field.Error match>{error}</Field.Error>}
+    </FormFieldInputContainer>
+  );
+};

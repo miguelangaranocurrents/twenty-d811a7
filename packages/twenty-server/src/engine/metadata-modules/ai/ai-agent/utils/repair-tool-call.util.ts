@@ -1,0 +1,137 @@
+import { Logger } from '@nestjs/common';
+
+import {
+  type LanguageModel,
+  type LanguageModelUsage,
+  NoSuchToolError,
+  Output,
+  type StepResult,
+  type ToolSet,
+  generateText,
+} from 'ai';
+import { isDefined } from 'twenty-shared/utils';
+import { type z } from 'zod';
+
+import { UsageOperationType } from 'src/engine/core-modules/usage/enums/usage-operation-type.enum';
+import { type UsageSpenders } from 'src/engine/core-modules/usage/types/usage-spenders.type';
+import { AiBillingService } from 'src/engine/metadata-modules/ai/ai-billing/services/ai-billing.service';
+import { extractCacheCreationTokensFromSteps } from 'src/engine/metadata-modules/ai/ai-billing/utils/extract-cache-creation-tokens.util';
+import { buildAiTelemetry } from 'src/engine/metadata-modules/ai/ai-models/utils/build-ai-telemetry.util';
+
+const logger = new Logger('repairToolCall');
+
+type ToolCall = {
+  type: 'tool-call';
+  toolCallId: string;
+  toolName: string;
+  input: string;
+};
+
+type RepairToolCallBillingContext = {
+  aiBillingService: AiBillingService;
+  modelId: string;
+  workspaceId: string;
+  spenders: UsageSpenders;
+  operationType: UsageOperationType;
+};
+
+export const repairToolCall = async ({
+  toolCall,
+  tools,
+  inputSchema,
+  error,
+  model,
+  billingContext,
+}: {
+  toolCall: ToolCall;
+  tools: Record<string, unknown>;
+  inputSchema: (toolCall: { toolName: string }) => unknown;
+  error: Error;
+  model: LanguageModel;
+  billingContext: RepairToolCallBillingContext;
+}): Promise<ToolCall | null> => {
+  if (NoSuchToolError.isInstance(error)) {
+    return null;
+  }
+
+  const tool = tools[toolCall.toolName];
+
+  if (!tool || typeof tool !== 'object' || !('inputSchema' in tool)) {
+    return null;
+  }
+
+  const schema = inputSchema(toolCall);
+
+  if (!schema || typeof schema !== 'object') {
+    return null;
+  }
+
+  let usage: LanguageModelUsage | undefined;
+  let steps: StepResult<ToolSet>[] | undefined;
+
+  try {
+    const result = await generateText({
+      model,
+      output: Output.object({ schema: schema as z.ZodTypeAny }),
+      prompt: [
+        `The AI model attempted to call the tool "${toolCall.toolName}" with invalid input.`,
+        ``,
+        `Input provided:`,
+        JSON.stringify(toolCall.input, null, 2),
+        ``,
+        `Error encountered:`,
+        error.message,
+        ``,
+        `Please fix the input to exactly match the required schema.`,
+        `Pay special attention to:`,
+        `- Enum values must match exactly (e.g., "DescNullsLast" not "desc")`,
+        `- Object structures must match the schema shape`,
+        `- Array items must follow the specified format`,
+      ].join('\n'),
+      ...buildAiTelemetry({
+        functionId: 'repair-tool-call',
+        workspaceId: billingContext.workspaceId,
+        userWorkspaceId: billingContext.spenders.userWorkspaceId,
+      }),
+    });
+
+    usage = result.usage;
+    steps = result.steps;
+
+    const repairedInput = result.output;
+
+    if (repairedInput == null) {
+      return null;
+    }
+
+    return {
+      type: 'tool-call',
+      toolCallId: toolCall.toolCallId,
+      toolName: toolCall.toolName,
+      input: JSON.stringify(repairedInput),
+    };
+  } catch {
+    return null;
+  } finally {
+    if (isDefined(usage)) {
+      const cacheCreationTokens = steps
+        ? extractCacheCreationTokensFromSteps(steps)
+        : 0;
+
+      void billingContext.aiBillingService
+        .calculateAndBillUsage({
+          modelId: billingContext.modelId,
+          billingInput: { usage, cacheCreationTokens },
+          workspaceId: billingContext.workspaceId,
+          operationType: billingContext.operationType,
+          spenders: billingContext.spenders,
+        })
+        .catch((error: unknown) =>
+          logger.error(
+            `Could not bill the repair of tool call ${toolCall.toolCallId} in workspace ${billingContext.workspaceId}`,
+            error instanceof Error ? error.stack : error,
+          ),
+        );
+    }
+  }
+};

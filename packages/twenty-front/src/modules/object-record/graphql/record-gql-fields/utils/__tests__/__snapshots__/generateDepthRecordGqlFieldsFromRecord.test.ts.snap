@@ -1,0 +1,18 @@
+// Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
+
+exports[`generateDepthRecordGqlFieldsFromRecord should generate depth one record gql fields from empty record 1`] = `{}`;
+
+exports[`generateDepthRecordGqlFieldsFromRecord should generate depth one record gql fields from record with some fields 1`] = `
+{
+  "domainName": true,
+  "id": true,
+  "name": true,
+}
+`;
+
+exports[`generateDepthRecordGqlFieldsFromRecord should generate depth zero record gql fields from record with some fields 1`] = `
+{
+  "id": true,
+  "name": true,
+}
+`;

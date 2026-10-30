@@ -1,0 +1,87 @@
+import { BILLING_PLAN_LABELS } from '@/settings/billing/constants/BillingPlanLabels';
+import { useFormatPrices } from '@/settings/billing/hooks/useFormatPrices';
+import {
+  type BillingPlanKey,
+  SubscriptionInterval,
+} from '~/generated-metadata/graphql';
+import {
+  assertIsDefinedOrThrow,
+  capitalize,
+  isDefined,
+} from 'twenty-shared/utils';
+import { doNotTranslate } from 'twenty-shared/i18n';
+import { currentWorkspaceState } from '@/auth/states/currentWorkspaceState';
+import { useLingui } from '@lingui/react/macro';
+import { beautifyExactDate } from '~/utils/date-utils';
+import { useAtomStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomStateValue';
+import { getSubscriptionPlanKey } from '@/settings/billing/utils/getSubscriptionPlanKey';
+
+export const useBillingWording = () => {
+  const { t } = useLingui();
+
+  const currentWorkspace = useAtomStateValue(currentWorkspaceState);
+
+  assertIsDefinedOrThrow(currentWorkspace);
+
+  const currentBillingSubscription =
+    currentWorkspace.currentBillingSubscription;
+
+  assertIsDefinedOrThrow(currentBillingSubscription);
+
+  const { formatPrices } = useFormatPrices();
+
+  const getIntervalLabel = (
+    isMonthly: boolean,
+    asAdjective: boolean = false,
+  ): string =>
+    isMonthly && asAdjective
+      ? t`monthly`
+      : asAdjective
+        ? t`annual`
+        : isMonthly
+          ? t`month`
+          : t`year`;
+
+  const getBeautifiedRenewDate = () => {
+    assertIsDefinedOrThrow(
+      currentBillingSubscription.currentPeriodEnd,
+      new Error(
+        doNotTranslate(`No renew date defined for current subscription.`),
+      ),
+    );
+
+    return beautifyExactDate(
+      new Date(currentBillingSubscription.currentPeriodEnd),
+    );
+  };
+
+  const getBillingPlanLabel = (planKey: BillingPlanKey) =>
+    t(BILLING_PLAN_LABELS[planKey]);
+
+  const getIntervalLabelAsAdjectiveCapitalize = (isMonthlyPlan: boolean) => {
+    return capitalize(getIntervalLabel(isMonthlyPlan, true));
+  };
+
+  const currentPlanKey = getSubscriptionPlanKey(currentBillingSubscription);
+
+  const yearlyPrice = isDefined(currentPlanKey)
+    ? formatPrices[currentPlanKey]?.[SubscriptionInterval.Year]
+    : undefined;
+
+  const monthlyPrice = isDefined(currentPlanKey)
+    ? formatPrices[currentPlanKey]?.[SubscriptionInterval.Month]
+    : undefined;
+
+  const getYearlyDiscountPercent = () =>
+    isDefined(monthlyPrice) && isDefined(yearlyPrice) && monthlyPrice > 0
+      ? Math.round((1 - yearlyPrice / monthlyPrice) * 100)
+      : 0;
+
+  return {
+    getBeautifiedRenewDate,
+    getBillingPlanLabel,
+    getIntervalLabel,
+    getIntervalLabelAsAdjectiveCapitalize,
+    getYearlyDiscountPercent,
+  };
+};

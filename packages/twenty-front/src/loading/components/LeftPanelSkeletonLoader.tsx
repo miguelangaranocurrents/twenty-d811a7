@@ -1,0 +1,78 @@
+import { SkeletonLine } from '@/ui/feedback/skeleton/components/SkeletonLine';
+import { styled } from '@linaria/react';
+import { motion } from 'framer-motion';
+import { SKELETON_HEIGHT_SIZES } from 'twenty-ui/primitives/feedback';
+
+import { NAVIGATION_DRAWER_CONSTRAINTS } from '@/ui/navigation/navigation-drawer/constants/NavigationDrawerConstraints';
+import { useIsMobile } from 'twenty-ui/utilities';
+import { MainNavigationDrawerItemsSkeletonLoader } from '~/loading/components/MainNavigationDrawerItemsSkeletonLoader';
+import { useTheme, themeCssVariables } from 'twenty-ui/theme';
+
+const StyledAnimatedContainer = styled(motion.div)`
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  height: 100%;
+  overflow: hidden;
+  padding: ${themeCssVariables.spacing[2]} 0 ${themeCssVariables.spacing[4]}
+    ${themeCssVariables.spacing[2]};
+`;
+
+const StyledItemsContainer = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 0;
+  overflow-y: auto;
+  width: 100%;
+`;
+
+const StyledSkeletonContainer = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+  width: 100%;
+`;
+
+const StyledSkeletonTitleContainer = styled.div`
+  align-items: flex-start;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  height: 32px;
+  justify-content: center;
+  width: 100%;
+`;
+
+export const LeftPanelSkeletonLoader = () => {
+  const theme = useTheme();
+  const isMobile = useIsMobile();
+  return (
+    <StyledAnimatedContainer
+      initial={false}
+      animate={{
+        width: isMobile ? 0 : NAVIGATION_DRAWER_CONSTRAINTS.default,
+        opacity: isMobile ? 0 : 1,
+      }}
+      transition={{
+        duration: theme.animation.duration.fast,
+      }}
+    >
+      <StyledItemsContainer>
+        <StyledSkeletonTitleContainer>
+          <SkeletonLine
+            width={96}
+            height={SKELETON_HEIGHT_SIZES.s}
+            baseColor={themeCssVariables.background.quaternary}
+          />
+        </StyledSkeletonTitleContainer>
+        <StyledSkeletonContainer>
+          <MainNavigationDrawerItemsSkeletonLoader length={3} />
+          <MainNavigationDrawerItemsSkeletonLoader title length={2} />
+          <MainNavigationDrawerItemsSkeletonLoader title length={3} />
+        </StyledSkeletonContainer>
+      </StyledItemsContainer>
+    </StyledAnimatedContainer>
+  );
+};

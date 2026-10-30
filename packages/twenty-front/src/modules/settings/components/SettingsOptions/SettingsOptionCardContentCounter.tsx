@@ -1,0 +1,69 @@
+import { SettingsCounter } from '@/settings/components/SettingsCounter';
+import {
+  StyledSettingsCardContent,
+  StyledSettingsCardDescription,
+  StyledSettingsCardIcon,
+  StyledSettingsCardTextContainer,
+  StyledSettingsCardTitle,
+} from '@/settings/components/SettingsOptions/SettingsCardContentBase';
+import { SettingsOptionIconCustomizer } from '@/settings/components/SettingsOptions/SettingsOptionIconCustomizer';
+import { isNonEmptyString } from '@sniptt/guards';
+import { useId } from 'react';
+import { OverflowingTextWithTooltip } from 'twenty-ui/primitives/typography';
+import { type IconComponent } from 'twenty-ui/icon';
+
+type SettingsOptionCardContentCounterProps = {
+  Icon?: IconComponent;
+  title: React.ReactNode;
+  description?: string;
+  disabled?: boolean;
+  value: number;
+  onChange: (value: number) => void;
+  minValue?: number;
+  maxValue?: number;
+  showButtons?: boolean;
+};
+
+export const SettingsOptionCardContentCounter = ({
+  Icon,
+  title,
+  description,
+  disabled = false,
+  value,
+  onChange,
+  minValue,
+  maxValue,
+  showButtons = true,
+}: SettingsOptionCardContentCounterProps) => {
+  const titleId = useId();
+  const descriptionId = useId();
+  const hasDescription = isNonEmptyString(description);
+
+  return (
+    <StyledSettingsCardContent>
+      {Icon && (
+        <StyledSettingsCardIcon>
+          <SettingsOptionIconCustomizer Icon={Icon} />
+        </StyledSettingsCardIcon>
+      )}
+      <StyledSettingsCardTextContainer>
+        <StyledSettingsCardTitle id={titleId}>{title}</StyledSettingsCardTitle>
+        {hasDescription && (
+          <StyledSettingsCardDescription id={descriptionId}>
+            <OverflowingTextWithTooltip text={description} />
+          </StyledSettingsCardDescription>
+        )}
+      </StyledSettingsCardTextContainer>
+      <SettingsCounter
+        aria-labelledby={titleId}
+        aria-describedby={hasDescription ? descriptionId : undefined}
+        value={value}
+        onChange={onChange}
+        minValue={minValue}
+        maxValue={maxValue}
+        disabled={disabled}
+        showButtons={showButtons}
+      />
+    </StyledSettingsCardContent>
+  );
+};

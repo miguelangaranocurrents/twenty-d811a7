@@ -1,0 +1,94 @@
+import { DeleteCoreWorkflowsCommand } from '@/object-core/workflows/components/DeleteCoreWorkflowsCommand';
+import { t } from '@lingui/core/macro';
+import {
+  CoreObjectNameSingular,
+  type RecordGqlOperationFilter,
+} from 'twenty-shared/types';
+import { HeadlessEngineCommandWrapperEffect } from '@/command-menu-item/engine-command/components/HeadlessEngineCommandWrapperEffect';
+import { useHeadlessCommandContextApi } from '@/command-menu-item/engine-command/hooks/useHeadlessCommandContextApi';
+import { useRemoveNavigationMenuItemByTargetRecordId } from '@/navigation-menu-item/common/hooks/useRemoveNavigationMenuItemByTargetRecordId';
+import { useNavigationMenuItemsData } from '@/navigation-menu-item/display/hooks/useNavigationMenuItemsData';
+import { DEFAULT_QUERY_PAGE_SIZE } from '@/object-record/constants/DefaultQueryPageSize';
+import { useIncrementalDeleteManyRecords } from '@/object-record/hooks/useIncrementalDeleteManyRecords';
+import { useRemoveSelectedRecordsFromRecordBoard } from '@/object-record/record-board/hooks/useRemoveSelectedRecordsFromRecordBoard';
+import { PLACEHOLDER_RECORD_INDEX_ID } from '@/object-record/record-index/constants/PlaceholderRecordIndexId';
+import { useResetRecordSelection } from '@/object-record/record-selection/hooks/useResetRecordSelection';
+import { useSidePanelMenu } from '@/side-panel/hooks/useSidePanelMenu';
+import { isDefined } from 'twenty-shared/utils';
+import { doNotTranslate } from 'twenty-shared/i18n';
+
+const DeleteWorkspaceRecordsCommand = () => {
+  const { recordIndexId, objectMetadataItem, selectedRecords, graphqlFilter } =
+    useHeadlessCommandContextApi();
+
+  if (!isDefined(objectMetadataItem)) {
+    throw new Error(
+      doNotTranslate('Object metadata is required to delete records'),
+    );
+  }
+
+  const recordId = selectedRecords[0]?.id;
+
+  const { resetRecordSelection } = useResetRecordSelection(
+    recordIndexId ?? PLACEHOLDER_RECORD_INDEX_ID,
+  );
+
+  const { removeSelectedRecordsFromRecordBoard } =
+    useRemoveSelectedRecordsFromRecordBoard(
+      recordIndexId ?? PLACEHOLDER_RECORD_INDEX_ID,
+    );
+
+  const noMatchFilter: RecordGqlOperationFilter = { id: { in: [] } };
+
+  const { incrementalDeleteManyRecords } = useIncrementalDeleteManyRecords({
+    objectNameSingular: objectMetadataItem.nameSingular,
+    filter: graphqlFilter ?? noMatchFilter,
+    pageSize: DEFAULT_QUERY_PAGE_SIZE,
+    delayInMsBetweenMutations: 50,
+  });
+
+  const { navigationMenuItems, workspaceNavigationMenuItems } =
+    useNavigationMenuItemsData();
+
+  const { removeNavigationMenuItemsByTargetRecordIds } =
+    useRemoveNavigationMenuItemByTargetRecordId();
+
+  const { closeSidePanelMenu } = useSidePanelMenu();
+
+  const handleExecute = async () => {
+    if (isDefined(recordIndexId)) {
+      removeSelectedRecordsFromRecordBoard();
+      resetRecordSelection();
+    }
+    closeSidePanelMenu();
+
+    if (isDefined(recordId)) {
+      const foundNavigationMenuItem = [
+        ...navigationMenuItems,
+        ...workspaceNavigationMenuItems,
+      ].find((item) => item.targetRecordId === recordId);
+
+      if (isDefined(foundNavigationMenuItem)) {
+        removeNavigationMenuItemsByTargetRecordIds([recordId]);
+      }
+    }
+
+    if (!isDefined(graphqlFilter)) {
+      throw new Error(t`Cannot delete records without a valid filter`);
+    }
+
+    await incrementalDeleteManyRecords();
+  };
+
+  return <HeadlessEngineCommandWrapperEffect execute={handleExecute} />;
+};
+
+export const DeleteRecordsCommand = () => {
+  const { objectMetadataItem } = useHeadlessCommandContextApi();
+  return objectMetadataItem?.nameSingular ===
+    CoreObjectNameSingular.Workflow ? (
+    <DeleteCoreWorkflowsCommand />
+  ) : (
+    <DeleteWorkspaceRecordsCommand />
+  );
+};

@@ -1,0 +1,204 @@
+import { useLingui } from '@lingui/react/macro';
+import { useFormContext } from 'react-hook-form';
+import { FieldMetadataType } from 'twenty-shared/types';
+import { isDefined } from 'twenty-shared/utils';
+import { IconLink } from 'twenty-ui/icon';
+
+import { useObjectMetadataItem } from '@/object-metadata/hooks/useObjectMetadataItem';
+import { useObjectMetadataItems } from '@/object-metadata/hooks/useObjectMetadataItems';
+import { useFieldMetadataItemById } from '@/object-metadata/hooks/useFieldMetadataItemById';
+import { findFieldMetadataItemByFieldMetadataId } from '@/object-metadata/utils/findFieldMetadataItemByFieldMetadataId';
+import { getFieldRelations } from '@/object-record/record-field/ui/utils/junction/getFieldRelations';
+import { isValidJunctionTargetField } from '@/object-record/record-field/ui/utils/junction/isValidJunctionTargetField';
+import { SettingsOptionCardContentSelect } from '@/settings/components/SettingsOptions/SettingsOptionCardContentSelect';
+import { SettingsOptionCardContentSwitch } from '@/settings/components/SettingsOptions/SettingsOptionCardContentSwitch';
+import { Select } from '@/ui/input/components/Select';
+import { RelationType } from '~/generated-metadata/graphql';
+import { type SettingsDataModelFieldEditFormValues } from '@/settings/data-model/types/SettingsDataModelFieldEditFormValues';
+
+type SettingsDataModelFieldRelationJunctionFormProps = {
+  objectNameSingular: string;
+  existingFieldMetadataId: string;
+  disabled?: boolean;
+};
+
+export const SettingsDataModelFieldRelationJunctionForm = ({
+  objectNameSingular,
+  existingFieldMetadataId,
+  disabled = false,
+}: SettingsDataModelFieldRelationJunctionFormProps) => {
+  const { t } = useLingui();
+  const { watch, setValue } =
+    useFormContext<SettingsDataModelFieldEditFormValues>();
+
+  const { objectMetadataItem: sourceObjectMetadataItem } =
+    useObjectMetadataItem({ objectNameSingular });
+
+  const { objectMetadataItems } = useObjectMetadataItems();
+  const { fieldMetadataItem: existingFieldMetadataItem } =
+    useFieldMetadataItemById(existingFieldMetadataId);
+
+  const relationType = watch('relationType') ?? RelationType.ONE_TO_MANY;
+  const targetObjectIds = watch('morphRelationObjectMetadataIds') ?? [];
+  const currentSettings = watch('settings');
+  const junctionTargetFieldId = currentSettings?.junctionTargetFieldId;
+
+  if (
+    relationType !== RelationType.ONE_TO_MANY ||
+    targetObjectIds.length !== 1
+  ) {
+    return null;
+  }
+
+  const junctionObjectMetadataItem = objectMetadataItems.find(
+    (item) => item.id === targetObjectIds[0],
+  );
+
+  if (!junctionObjectMetadataItem) {
+    return null;
+  }
+
+  const sourceObjectMetadataId = sourceObjectMetadataItem?.id;
+  const sourceFieldMetadataId =
+    existingFieldMetadataItem?.relation?.targetFieldMetadata.id ??
+    existingFieldMetadataItem?.morphRelations?.find(
+      ({ targetObjectMetadata }) =>
+        targetObjectMetadata.id === junctionObjectMetadataItem.id,
+    )?.targetFieldMetadata.id;
+
+  if (sourceObjectMetadataId === junctionObjectMetadataItem.id) {
+    return null;
+  }
+
+  const junctionFieldOptions: { label: string; value: string }[] = [];
+  const morphIdsSeen = new Set<string>();
+  for (const field of junctionObjectMetadataItem.fields) {
+    if (
+      !isValidJunctionTargetField({
+        fieldMetadataItem: field,
+        sourceFieldMetadataId,
+      })
+    ) {
+      continue;
+    }
+
+    if (
+      field.type === FieldMetadataType.MORPH_RELATION &&
+      isDefined(field.morphId)
+    ) {
+      if (morphIdsSeen.has(field.morphId)) {
+        continue;
+      }
+      morphIdsSeen.add(field.morphId);
+    }
+
+    junctionFieldOptions.push({
+      label: `${field.label}${field.type === FieldMetadataType.MORPH_RELATION ? ' (polymorphic)' : ''}`,
+      value: field.id,
+    });
+  }
+
+  const isJunctionConfigEnabled = isDefined(junctionTargetFieldId);
+  const selectedJunctionTargetFieldId = isDefined(junctionTargetFieldId)
+    ? (findFieldMetadataItemByFieldMetadataId({
+        fieldMetadataItems: junctionObjectMetadataItem.fields,
+        fieldMetadataId: junctionTargetFieldId,
+      })?.id ?? junctionTargetFieldId)
+    : undefined;
+  const isConfiguredTargetValid = junctionFieldOptions.some(
+    ({ value }) => value === selectedJunctionTargetFieldId,
+  );
+
+  const isJunctionLikeObject = junctionObjectMetadataItem.fields.every(
+    (field) =>
+      field.isSystem === true ||
+      getFieldRelations(field).every(
+        ({ type }) => type === RelationType.MANY_TO_ONE,
+      ),
+  );
+
+  if (
+    !isJunctionConfigEnabled &&
+    (junctionFieldOptions.length === 0 || !isJunctionLikeObject)
+  ) {
+    return null;
+  }
+
+  const handleJunctionToggle = (checked: boolean) => {
+    if (checked && junctionFieldOptions.length > 0) {
+      setValue(
+        'settings',
+        {
+          ...currentSettings,
+          junctionTargetFieldId: junctionFieldOptions[0].value,
+        },
+        {
+          shouldDirty: true,
+        },
+      );
+    } else {
+      setValue(
+        'settings',
+        {
+          ...currentSettings,
+          junctionTargetFieldId: undefined,
+        },
+        {
+          shouldDirty: true,
+        },
+      );
+    }
+  };
+
+  const handleSelectionChange = (selectedValue: string) => {
+    setValue(
+      'settings',
+      {
+        ...currentSettings,
+        junctionTargetFieldId: selectedValue,
+      },
+      {
+        shouldDirty: true,
+      },
+    );
+  };
+
+  return (
+    <>
+      <SettingsOptionCardContentSwitch
+        Icon={IconLink}
+        title={t`This is a relation to a Junction Object`}
+        description={t`Build many-to-many relations`}
+        checked={isJunctionConfigEnabled}
+        onChange={handleJunctionToggle}
+        disabled={disabled}
+        divider={isJunctionConfigEnabled && junctionFieldOptions.length > 0}
+      />
+
+      {isJunctionConfigEnabled && junctionFieldOptions.length > 0 && (
+        <SettingsOptionCardContentSelect
+          title={t`Target relation on Junction Object`}
+          description={t`Skip the junction object (similar to many-to-many relations)`}
+        >
+          <Select
+            dropdownId="junction-target-field-select"
+            selectSizeVariant="small"
+            dropdownWidth={120}
+            value={selectedJunctionTargetFieldId}
+            emptyOption={
+              !isConfiguredTargetValid && isDefined(junctionTargetFieldId)
+                ? {
+                    label: t`Select a valid target`,
+                    value: selectedJunctionTargetFieldId,
+                  }
+                : undefined
+            }
+            options={junctionFieldOptions}
+            onChange={handleSelectionChange}
+            disabled={disabled}
+          />
+        </SettingsOptionCardContentSelect>
+      )}
+    </>
+  );
+};

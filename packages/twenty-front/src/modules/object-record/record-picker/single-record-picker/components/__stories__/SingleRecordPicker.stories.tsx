@@ -1,0 +1,55 @@
+import { type Meta, type StoryObj } from '@storybook/react-vite';
+import { expect, userEvent, within } from 'storybook/test';
+
+import { CoreObjectNameSingular } from 'twenty-shared/types';
+import { ObjectMetadataItemsDecorator } from '~/testing/decorators/ObjectMetadataItemsDecorator';
+import { ToastDecorator } from '~/testing/decorators/ToastDecorator';
+import { graphqlMocks } from '~/testing/graphqlMocks';
+
+import { SingleRecordPicker } from '@/object-record/record-picker/single-record-picker/components/SingleRecordPicker';
+import { IconUserCircle } from 'twenty-ui/icon';
+import { ComponentDecorator } from 'twenty-ui/testing';
+
+const meta: Meta<typeof SingleRecordPicker> = {
+  title: 'UI/RecordPicker/SingleRecordPicker',
+  component: SingleRecordPicker,
+  decorators: [
+    ComponentDecorator,
+    ObjectMetadataItemsDecorator,
+    ToastDecorator,
+  ],
+  args: {
+    objectNameSingulars: [CoreObjectNameSingular.WorkspaceMember],
+    componentInstanceId: 'single-record-picker',
+  },
+  argTypes: {},
+  parameters: {
+    msw: graphqlMocks,
+  },
+};
+
+export default meta;
+type Story = StoryObj<typeof SingleRecordPicker>;
+
+export const Default: Story = {};
+
+export const WithSelectedRecord: Story = {};
+
+export const WithEmptyOption: Story = {
+  args: {
+    EmptyIcon: IconUserCircle,
+    emptyLabel: 'Nobody',
+  },
+};
+
+export const WithSearchFilter: Story = {
+  play: async ({ canvasElement, step }) => {
+    const canvas = within(canvasElement);
+    const searchInput = await canvas.findByRole('textbox');
+
+    await step('Enter search text', async () => {
+      await userEvent.type(searchInput, 'a');
+      await expect(searchInput).toHaveValue('a');
+    });
+  },
+};

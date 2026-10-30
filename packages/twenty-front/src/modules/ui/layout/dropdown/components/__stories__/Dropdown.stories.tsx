@@ -1,0 +1,288 @@
+import { styled } from '@linaria/react';
+import {
+  type Decorator,
+  type Meta,
+  type StoryObj,
+} from '@storybook/react-vite';
+import { type PlayFunction } from 'storybook/internal/types';
+import { expect, userEvent, waitFor, within } from 'storybook/test';
+
+import { DropdownMenuSkeletonItem } from '@/ui/input/relation-picker/components/skeletons/DropdownMenuSkeletonItem';
+
+import { LegacyDropdownContent } from '@/ui/layout/dropdown/components/LegacyDropdownContent';
+import { DropdownMenuHeaderLeftComponent } from '@/ui/layout/dropdown/components/DropdownMenuHeader/internal/DropdownMenuHeaderLeftComponent';
+import { Dropdown } from '@/ui/layout/dropdown/components/Dropdown';
+import { DropdownMenuHeader } from '@/ui/layout/dropdown/components/DropdownMenuHeader/DropdownMenuHeader';
+import { DropdownMenuInput } from '@/ui/layout/dropdown/components/DropdownMenuInput';
+import { DropdownMenuItemsContainer } from '@/ui/layout/dropdown/components/DropdownMenuItemsContainer';
+import { DropdownMenuSearchInput } from '@/ui/layout/dropdown/components/DropdownMenuSearchInput';
+import { DropdownMenuSeparator } from '@/ui/layout/dropdown/components/DropdownMenuSeparator';
+import { StyledDropdownMenuSubheader } from '@/ui/layout/dropdown/components/StyledDropdownMenuSubheader';
+import { IconChevronLeft } from 'twenty-ui/icon';
+import { Button } from 'twenty-ui/primitives/input';
+import { ListItem } from 'twenty-ui/primitives/navigation';
+import { ComponentDecorator } from 'twenty-ui/testing';
+
+const meta: Meta<typeof Dropdown> = {
+  title: 'UI/Layout/Dropdown/Dropdown',
+  component: Dropdown,
+  decorators: [ComponentDecorator, (Story) => <Story />],
+  args: {
+    clickableComponent: <Button>{'Open Dropdown'}</Button>,
+    dropdownOffset: { x: 0, y: 8 },
+    dropdownId: 'test-dropdown-id',
+  },
+  argTypes: {
+    clickableComponent: { control: false },
+    dropdownOffset: { control: false },
+    dropdownComponents: { control: false },
+  },
+};
+
+export default meta;
+type Story = StoryObj<typeof Dropdown>;
+
+const StyledContainer = styled.div`
+  height: 600px;
+  position: relative;
+
+  width: 300px;
+`;
+
+const StyledMenuAbsolutePositionWrapper = styled.div`
+  height: fit-content;
+  width: fit-content;
+`;
+
+const WithContentBelowDecorator: Decorator = (Story) => (
+  <StyledContainer>
+    <StyledMenuAbsolutePositionWrapper>
+      <Story />
+    </StyledMenuAbsolutePositionWrapper>
+    Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod
+    tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam,
+    quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo
+    consequat.
+  </StyledContainer>
+);
+
+const StyledEmptyDropdownContent = styled.div`
+  height: 400px;
+  width: 100%;
+`;
+
+export const Empty: Story = {
+  args: {
+    dropdownComponents: (
+      <LegacyDropdownContent>
+        <StyledEmptyDropdownContent data-testid="dropdown-content" />
+      </LegacyDropdownContent>
+    ),
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement.ownerDocument.body);
+
+    const buttons = await canvas.findAllByRole('button');
+    await userEvent.click(buttons[0]);
+
+    const fakeMenu = await canvas.findByTestId('dropdown-content');
+
+    await waitFor(() => {
+      expect(fakeMenu).toBeInTheDocument();
+    });
+
+    await userEvent.click(buttons[0]);
+
+    await waitFor(() => {
+      const fakeMenuBis = canvas.queryByTestId('dropdown-content');
+      expect(fakeMenuBis).not.toBeInTheDocument();
+    });
+
+    await userEvent.click(buttons[0]);
+    const fakeMenuTer = await canvas.findByTestId('dropdown-content');
+
+    await waitFor(() => {
+      expect(fakeMenuTer).toBeInTheDocument();
+    });
+  },
+};
+
+export const InterfaceScale: Story = {
+  args: {
+    clickableComponent: <span>Open Dropdown</span>,
+    dropdownPlacement: 'bottom-start',
+    dropdownOffset: { x: 0, y: 0 },
+    dropdownComponents: (
+      <div style={{ width: 200, height: 100 }}>Scaled dropdown</div>
+    ),
+  },
+  render: (args) => (
+    <div style={{ paddingLeft: 200, paddingTop: 100 }}>
+      <Dropdown {...args} />
+    </div>
+  ),
+  play: async ({ canvasElement }) => {
+    const document = canvasElement.ownerDocument;
+    const canvas = within(document.body);
+    const rootStyle = document.documentElement.style;
+    const previousZoom = rootStyle.getPropertyValue('zoom');
+    const previousScale = rootStyle.getPropertyValue('--t-zoom');
+
+    try {
+      for (const scale of [0.9, 1, 1.1, 1.25, 14 / 13]) {
+        rootStyle.setProperty('--t-zoom', String(scale));
+        rootStyle.setProperty('zoom', 'var(--t-zoom)');
+
+        const button = canvas.getByRole('button', { name: 'Open Dropdown' });
+        await userEvent.click(button);
+
+        const menu = await canvas.findByRole('listbox');
+        await waitFor(() => {
+          const anchorBounds = button.getBoundingClientRect();
+          const menuBounds = menu.getBoundingClientRect();
+
+          const contentBounds = canvas
+            .getByText('Scaled dropdown')
+            .getBoundingClientRect();
+          expect(Math.abs(contentBounds.width - 200 * scale)).toBeLessThan(1);
+          expect(Math.abs(contentBounds.height - 100 * scale)).toBeLessThan(1);
+
+          expect(Math.abs(menuBounds.left - anchorBounds.left)).toBeLessThan(1);
+          expect(Math.abs(menuBounds.top - anchorBounds.bottom)).toBeLessThan(
+            1,
+          );
+        });
+
+        await userEvent.click(button);
+      }
+    } finally {
+      rootStyle.setProperty('zoom', previousZoom);
+      rootStyle.setProperty('--t-zoom', previousScale);
+    }
+  },
+};
+
+const optionsMock = [
+  {
+    id: '1',
+    name: 'Company A',
+  },
+  {
+    id: '2',
+    name: 'Company B',
+  },
+  {
+    id: '3',
+    name: 'Company C',
+  },
+  {
+    id: '4',
+    name: 'Person 2',
+  },
+  {
+    id: '5',
+    name: 'Company D',
+  },
+  {
+    id: '6',
+    name: 'Person 1',
+  },
+];
+
+const playInteraction: PlayFunction<any, any> = async ({ canvasElement }) => {
+  const canvas = within(canvasElement.ownerDocument.body);
+
+  const buttons = await canvas.findAllByRole('button');
+  await userEvent.click(buttons[0]);
+
+  await waitFor(() => {
+    expect(canvas.getByText('Company A')).toBeInTheDocument();
+  });
+};
+
+export const WithHeaders: Story = {
+  decorators: [WithContentBelowDecorator],
+  args: {
+    dropdownComponents: (
+      <LegacyDropdownContent>
+        <DropdownMenuHeader
+          StartComponent={
+            <DropdownMenuHeaderLeftComponent Icon={IconChevronLeft} />
+          }
+        >
+          Header
+        </DropdownMenuHeader>
+        <StyledDropdownMenuSubheader>Subheader 1</StyledDropdownMenuSubheader>
+        <DropdownMenuItemsContainer hasMaxHeight>
+          <>
+            {optionsMock.slice(0, 3).map((item) => (
+              <ListItem key={item.id}>{item.name}</ListItem>
+            ))}
+          </>
+        </DropdownMenuItemsContainer>
+        <DropdownMenuSeparator />
+        <StyledDropdownMenuSubheader>Subheader 2</StyledDropdownMenuSubheader>
+        <DropdownMenuItemsContainer>
+          {optionsMock.slice(3).map((item) => (
+            <ListItem key={item.id}>{item.name}</ListItem>
+          ))}
+        </DropdownMenuItemsContainer>
+      </LegacyDropdownContent>
+    ),
+  },
+  play: playInteraction,
+};
+
+export const SearchWithLoadingMenu: Story = {
+  decorators: [WithContentBelowDecorator],
+  args: {
+    dropdownComponents: (
+      <LegacyDropdownContent>
+        <DropdownMenuSearchInput value="query" autoFocus />
+        <DropdownMenuSeparator />
+        <DropdownMenuItemsContainer hasMaxHeight>
+          <DropdownMenuSkeletonItem />
+        </DropdownMenuItemsContainer>
+      </LegacyDropdownContent>
+    ),
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement.ownerDocument.body);
+
+    const buttons = await canvas.findAllByRole('button');
+
+    await userEvent.click(buttons[0]);
+
+    await waitFor(() => {
+      expect(canvas.getByDisplayValue('query')).toBeInTheDocument();
+    });
+
+    await userEvent.click(buttons[0]);
+
+    await waitFor(() => {
+      expect(canvas.queryByDisplayValue('query')).not.toBeInTheDocument();
+    });
+  },
+};
+
+export const WithInput: Story = {
+  decorators: [WithContentBelowDecorator],
+  args: {
+    dropdownComponents: (
+      <LegacyDropdownContent>
+        <DropdownMenuInput
+          instanceId="dropdown-menu-input"
+          value="Lorem ipsum"
+          autoFocus
+        />
+        <DropdownMenuSeparator />
+        <DropdownMenuItemsContainer hasMaxHeight>
+          {optionsMock.map(({ name }) => (
+            <ListItem key={name}>{name}</ListItem>
+          ))}
+        </DropdownMenuItemsContainer>
+      </LegacyDropdownContent>
+    ),
+  },
+  play: playInteraction,
+};

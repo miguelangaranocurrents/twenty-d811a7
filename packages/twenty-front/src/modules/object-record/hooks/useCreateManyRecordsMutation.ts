@@ -1,0 +1,55 @@
+import gql from 'graphql-tag';
+
+import { useObjectMetadataItem } from '@/object-metadata/hooks/useObjectMetadataItem';
+import { objectMetadataItemsSelector } from '@/object-metadata/states/objectMetadataItemsSelector';
+import { useAtomStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomStateValue';
+import { mapObjectMetadataToGraphQLQuery } from '@/object-metadata/utils/mapObjectMetadataToGraphQLQuery';
+import { EMPTY_MUTATION } from '@/object-record/constants/EmptyMutation';
+import { type RecordGqlFields } from 'twenty-shared/types';
+import { useObjectPermissions } from '@/object-record/hooks/useObjectPermissions';
+import { getCreateManyRecordsMutationResponseField } from '@/object-record/utils/getCreateManyRecordsMutationResponseField';
+import { capitalize, isDefined } from 'twenty-shared/utils';
+
+export const useCreateManyRecordsMutation = ({
+  objectNameSingular,
+  recordGqlFields,
+}: {
+  objectNameSingular: string;
+  recordGqlFields?: RecordGqlFields;
+}) => {
+  const { objectMetadataItem } = useObjectMetadataItem({
+    objectNameSingular,
+  });
+
+  const { objectPermissionsByObjectMetadataId } = useObjectPermissions();
+
+  const objectMetadataItems = useAtomStateValue(objectMetadataItemsSelector);
+
+  if (!isDefined(objectMetadataItem)) {
+    return { createManyRecordsMutation: EMPTY_MUTATION };
+  }
+
+  const mutationResponseField = getCreateManyRecordsMutationResponseField(
+    objectMetadataItem.namePlural,
+  );
+
+  const createManyRecordsMutation = gql`
+    mutation Create${capitalize(
+      objectMetadataItem.namePlural,
+    )}($data: [${capitalize(
+      objectMetadataItem.nameSingular,
+    )}CreateInput!]!, $upsert: Boolean)  {
+      ${mutationResponseField}(data: $data, upsert: $upsert) ${mapObjectMetadataToGraphQLQuery(
+        {
+          objectMetadataItems,
+          objectMetadataItem,
+          recordGqlFields,
+          objectPermissionsByObjectMetadataId,
+        },
+      )}
+  }`;
+
+  return {
+    createManyRecordsMutation,
+  };
+};

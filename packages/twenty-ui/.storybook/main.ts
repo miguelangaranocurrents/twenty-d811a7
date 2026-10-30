@@ -1,0 +1,55 @@
+import type { StorybookConfig } from '@storybook/react-vite';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import checker from 'vite-plugin-checker';
+
+const dirname =
+  typeof __dirname !== 'undefined'
+    ? __dirname
+    : path.dirname(fileURLToPath(import.meta.url));
+
+const isVitest = Boolean(process.env.VITEST);
+const isCoverageEnabled = process.env.STORYBOOK_COVERAGE === 'true';
+
+const config: StorybookConfig = {
+  stories: ['../src/**/*.@(mdx|stories.@(js|jsx|ts|tsx))'],
+
+  addons: [
+    '@storybook-community/storybook-addon-cookie',
+    '@storybook/addon-links',
+    ...(isCoverageEnabled ? ['@storybook/addon-coverage'] : []),
+    '@storybook/addon-a11y',
+    'storybook-addon-pseudo-states',
+    '@storybook/addon-vitest',
+  ],
+
+  framework: '@storybook/react-vite',
+
+  viteFinal: async (viteConfig) => {
+    const plugins = [...(viteConfig.plugins ?? [])];
+
+    if (!isVitest) {
+      plugins.push(
+        checker({
+          typescript: {
+            tsconfigPath: path.resolve(dirname, '../tsconfig.json'),
+          },
+        }),
+      );
+    }
+
+    return {
+      ...viteConfig,
+      plugins,
+      resolve: {
+        ...viteConfig.resolve,
+        alias: {
+          ...(viteConfig.resolve?.alias ?? {}),
+          '@tabler/icons-react': '@tabler/icons-react/dist/esm/icons/index.mjs',
+        },
+      },
+    };
+  },
+};
+
+export default config;

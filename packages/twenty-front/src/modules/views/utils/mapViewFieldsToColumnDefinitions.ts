@@ -1,0 +1,70 @@
+import { type FieldMetadata } from '@/object-record/record-field/ui/types/FieldMetadata';
+import { type ColumnDefinition } from '@/object-record/record-table/types/ColumnDefinition';
+import { mapArrayToObject } from '~/utils/array/mapArrayToObject';
+import { moveArrayItem } from '~/utils/array/moveArrayItem';
+
+import { isDefined } from 'twenty-shared/utils';
+import { type ViewField } from '@/views/types/ViewField';
+
+export const mapViewFieldsToColumnDefinitions = ({
+  columnDefinitions,
+  viewFields,
+}: {
+  columnDefinitions: ColumnDefinition<FieldMetadata>[];
+  viewFields: ViewField[];
+}): ColumnDefinition<FieldMetadata>[] => {
+  let labelIdentifierFieldMetadataId = '';
+
+  const columnDefinitionsByFieldMetadataId = mapArrayToObject(
+    columnDefinitions,
+    ({ fieldMetadataId }) => fieldMetadataId,
+  );
+
+  const columnDefinitionsFromViewFields = viewFields
+    .map((viewField) => {
+      const correspondingColumnDefinition =
+        columnDefinitionsByFieldMetadataId[viewField.fieldMetadataId];
+
+      if (!isDefined(correspondingColumnDefinition)) return null;
+
+      const { isLabelIdentifier } = correspondingColumnDefinition;
+
+      if (isLabelIdentifier === true) {
+        labelIdentifierFieldMetadataId =
+          correspondingColumnDefinition.fieldMetadataId;
+      }
+
+      return {
+        fieldMetadataId: viewField.fieldMetadataId,
+        label: correspondingColumnDefinition.label,
+        metadata: correspondingColumnDefinition.metadata,
+        iconName: correspondingColumnDefinition.iconName,
+        type: correspondingColumnDefinition.type,
+        position: isLabelIdentifier ? 0 : viewField.position,
+        size: viewField.size ?? correspondingColumnDefinition.size,
+        isLabelIdentifier,
+        isVisible: isLabelIdentifier || viewField.isVisible,
+        viewFieldId: viewField.id,
+        isUIEditable: correspondingColumnDefinition.metadata.isUIEditable,
+        isSortable: correspondingColumnDefinition.isSortable,
+        isFilterable: correspondingColumnDefinition.isFilterable,
+        defaultValue: correspondingColumnDefinition.defaultValue,
+        settings:
+          'settings' in correspondingColumnDefinition.metadata
+            ? correspondingColumnDefinition.metadata.settings
+            : undefined,
+      } as ColumnDefinition<FieldMetadata>;
+    })
+    .filter(isDefined);
+
+  if (!labelIdentifierFieldMetadataId) return columnDefinitionsFromViewFields;
+
+  const labelIdentifierIndex = columnDefinitionsFromViewFields.findIndex(
+    ({ fieldMetadataId }) => fieldMetadataId === labelIdentifierFieldMetadataId,
+  );
+
+  return moveArrayItem(columnDefinitionsFromViewFields, {
+    fromIndex: labelIdentifierIndex,
+    toIndex: 0,
+  });
+};

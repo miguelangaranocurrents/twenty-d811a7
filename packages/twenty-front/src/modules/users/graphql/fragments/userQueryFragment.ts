@@ -1,0 +1,145 @@
+import {
+  AVAILABLE_WORKSPACE_FOR_AUTH_FRAGMENT,
+  AVAILABLE_WORKSPACES_FOR_AUTH_FRAGMENT,
+} from '@/auth/graphql/fragments/authFragments';
+import { OBJECT_PERMISSION_FRAGMENT } from '@/settings/roles/graphql/fragments/objectPermissionFragment';
+import { ROLE_FRAGMENT } from '@/settings/roles/graphql/fragments/roleFragment';
+import { ROW_LEVEL_PERMISSION_PREDICATE_FRAGMENT } from '@/settings/roles/graphql/fragments/rowLevelPermissionPredicateFragment';
+import { ROW_LEVEL_PERMISSION_PREDICATE_GROUP_FRAGMENT } from '@/settings/roles/graphql/fragments/rowLevelPermissionPredicateGroupFragment';
+import { BILLING_SUBSCRIPTION_FRAGMENT } from '@/users/graphql/fragments/billingSubscriptionsFragment';
+import { CURRENT_BILLING_SUBSCRIPTION_FRAGMENT } from '@/users/graphql/fragments/currentBillingSubscriptionFragment';
+import { WORKSPACE_URLS_FRAGMENT } from '@/users/graphql/fragments/workspaceUrlsFragment';
+import { DELETED_WORKSPACE_MEMBER_QUERY_FRAGMENT } from '@/workspace-member/graphql/fragments/deletedWorkspaceMemberQueryFragment';
+import { PARTIAL_WORKSPACE_MEMBER_QUERY_FRAGMENT } from '@/workspace-member/graphql/fragments/partialWorkspaceMemberQueryFragment';
+import { WORKSPACE_MEMBER_QUERY_FRAGMENT } from '@/workspace-member/graphql/fragments/workspaceMemberQueryFragment';
+import { gql } from '@apollo/client';
+
+export const USER_QUERY_FRAGMENT = gql`
+  fragment UserQueryFragment on User {
+    id
+    firstName
+    lastName
+    email
+    hasPassword
+    canAccessFullAdminPanel
+    canImpersonate
+    supportUserHash
+    onboardingStatus
+    previousOnboardingStatus
+    isWorkspaceCreator
+    workspaceMember {
+      ...WorkspaceMemberQueryFragment
+    }
+    workspaceMembers {
+      ...PartialWorkspaceMemberQueryFragment
+    }
+    deletedWorkspaceMembers {
+      ...DeletedWorkspaceMemberQueryFragment
+    }
+    currentUserWorkspace {
+      id
+      permissionFlags
+      isImpersonating
+      objectsPermissions {
+        ...ObjectPermissionFragment
+        rowLevelPermissionPredicates {
+          ...RowLevelPermissionPredicateFragment
+        }
+        rowLevelPermissionPredicateGroups {
+          ...RowLevelPermissionPredicateGroupFragment
+        }
+      }
+      twoFactorAuthenticationMethodSummary {
+        twoFactorAuthenticationMethodId
+        status
+        strategy
+      }
+    }
+    currentWorkspace {
+      id
+      displayName
+      logo
+      inviteHash
+      allowImpersonation
+      activationStatus
+      isPublicInviteLinkEnabled
+      isCampaignClickTrackingEnabled
+      isCampaignOpenTrackingEnabled
+      workspaceDiscoverability
+      isGoogleAuthEnabled
+      isMicrosoftAuthEnabled
+      isPasswordAuthEnabled
+      isGoogleAuthBypassEnabled
+      isMicrosoftAuthBypassEnabled
+      isPasswordAuthBypassEnabled
+      subdomain
+      customDomain
+      hasValidSignedEnterpriseKey
+      hasValidEnterpriseValidityToken
+      workspaceCustomApplication {
+        id
+      }
+      installedApplications {
+        id
+        name
+        universalIdentifier
+        logoUrl
+        createdAt
+      }
+      isCustomDomainEnabled
+      workspaceUrls {
+        ...WorkspaceUrlsFragment
+      }
+      featureFlags {
+        key
+        value
+      }
+      currentBillingSubscription {
+        ...CurrentBillingSubscriptionFragment
+      }
+      billingCustomer {
+        id
+        hasPaymentMethod
+        userCreditsFallback
+      }
+      billingSubscriptions {
+        ...BillingSubscriptionFragment
+      }
+      billingEntitlements {
+        key
+        value
+      }
+      workspaceMembersCount
+      defaultRole {
+        ...RoleFragment
+      }
+      aiChatModelTier
+      aiAgentModelTier
+      isAutoModelSelectionEnabled
+      aiModelIdByTier
+      aiAdditionalInstructions
+      isTwoFactorAuthenticationEnforced
+      trashRetentionDays
+      eventLogRetentionDays
+      editableProfileFields
+      isInternalMessagesImportEnabled
+    }
+    availableWorkspaces {
+      ...AvailableWorkspacesFragment
+    }
+    userVars
+  }
+
+  ${WORKSPACE_MEMBER_QUERY_FRAGMENT}
+  ${DELETED_WORKSPACE_MEMBER_QUERY_FRAGMENT}
+  ${PARTIAL_WORKSPACE_MEMBER_QUERY_FRAGMENT}
+  ${OBJECT_PERMISSION_FRAGMENT}
+  ${ROW_LEVEL_PERMISSION_PREDICATE_FRAGMENT}
+  ${ROW_LEVEL_PERMISSION_PREDICATE_GROUP_FRAGMENT}
+  ${WORKSPACE_URLS_FRAGMENT}
+  ${ROLE_FRAGMENT}
+  ${AVAILABLE_WORKSPACES_FOR_AUTH_FRAGMENT}
+  ${AVAILABLE_WORKSPACE_FOR_AUTH_FRAGMENT}
+  ${CURRENT_BILLING_SUBSCRIPTION_FRAGMENT}
+  ${BILLING_SUBSCRIPTION_FRAGMENT}
+`;

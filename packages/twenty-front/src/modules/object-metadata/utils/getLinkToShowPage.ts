@@ -1,0 +1,46 @@
+import { AppPath, CoreObjectNameSingular } from 'twenty-shared/types';
+import { getAppPath } from 'twenty-shared/utils';
+import { getBasePathToShowPage } from '@/object-metadata/utils/getBasePathToShowPage';
+import { type ObjectRecord } from '@/object-record/types/ObjectRecord';
+
+export const getLinkToShowPage = (
+  objectNameSingular: string,
+  record: Partial<ObjectRecord>,
+) => {
+  const basePathToShowPage = getBasePathToShowPage({
+    objectNameSingular,
+  });
+
+  const isWorkspaceMemberObjectMetadata =
+    objectNameSingular === CoreObjectNameSingular.WorkspaceMember;
+
+  if (objectNameSingular === CoreObjectNameSingular.NoteTarget) {
+    return (
+      getBasePathToShowPage({
+        objectNameSingular: CoreObjectNameSingular.Note,
+      }) + record.note?.id
+    );
+  }
+
+  if (
+    objectNameSingular === CoreObjectNameSingular.AgentChatThread &&
+    record.id
+  ) {
+    return getAppPath(AppPath.AiChat, { threadId: record.id });
+  }
+
+  if (objectNameSingular === CoreObjectNameSingular.TaskTarget) {
+    return (
+      getBasePathToShowPage({
+        objectNameSingular: CoreObjectNameSingular.Task,
+      }) + record.task?.id
+    );
+  }
+
+  const linkToShowPage =
+    isWorkspaceMemberObjectMetadata || !record.id
+      ? ''
+      : `${basePathToShowPage}${record.id}`;
+
+  return linkToShowPage;
+};

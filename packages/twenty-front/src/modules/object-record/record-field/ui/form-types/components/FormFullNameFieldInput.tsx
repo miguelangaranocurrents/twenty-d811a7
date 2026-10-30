@@ -1,0 +1,68 @@
+import { t } from '@lingui/core/macro';
+import { FormFieldInputContainer } from '@/ui/input/components/FormFieldInputContainer';
+import { FormNestedFieldInputContainer } from '@/object-record/record-field/ui/form-types/components/FormNestedFieldInputContainer';
+import { FormTextFieldInput } from '@/object-record/record-field/ui/form-types/components/FormTextFieldInput';
+import { type VariablePickerComponent } from '@/ui/input/types/VariablePickerComponent';
+import { addCharactersToAvoidPasswordManagers } from '@/object-record/record-field/ui/meta-types/input/utils/addCharactersToAvoidPasswordManagers';
+import { type FieldFullNameValue } from '@/object-record/record-field/ui/types/FieldMetadata';
+import { Field } from 'twenty-ui/primitives/input';
+
+type FormFullNameFieldInputProps = {
+  label?: string;
+  defaultValue: FieldFullNameValue | undefined;
+  onChange: (value: FieldFullNameValue) => void;
+  VariablePicker?: VariablePickerComponent;
+  readonly?: boolean;
+  subFieldPlaceholders?: Partial<Record<keyof FieldFullNameValue, string>>;
+};
+
+export const FormFullNameFieldInput = ({
+  label,
+  defaultValue,
+  onChange,
+  readonly,
+  VariablePicker,
+  subFieldPlaceholders,
+}: FormFullNameFieldInputProps) => {
+  const handleFirstNameChange = (newText: string) => {
+    onChange({
+      lastName: defaultValue?.lastName ?? '',
+      firstName: newText,
+    });
+  };
+
+  const handleLastNameChange = (newText: string) => {
+    onChange({
+      firstName: defaultValue?.firstName ?? '',
+      lastName: newText,
+    });
+  };
+
+  return (
+    <FormFieldInputContainer>
+      {label ? <Field.Label>{label}</Field.Label> : null}
+      <FormNestedFieldInputContainer>
+        <FormTextFieldInput
+          label={t`First Name`}
+          defaultValue={defaultValue?.firstName}
+          onChange={handleFirstNameChange}
+          placeholder={addCharactersToAvoidPasswordManagers(
+            subFieldPlaceholders?.firstName ?? t`First name`,
+          )}
+          readonly={readonly}
+          VariablePicker={VariablePicker}
+        />
+        <FormTextFieldInput
+          label={t`Last Name`}
+          defaultValue={defaultValue?.lastName}
+          onChange={handleLastNameChange}
+          placeholder={addCharactersToAvoidPasswordManagers(
+            subFieldPlaceholders?.lastName ?? t`Last name`,
+          )}
+          readonly={readonly}
+          VariablePicker={VariablePicker}
+        />
+      </FormNestedFieldInputContainer>
+    </FormFieldInputContainer>
+  );
+};

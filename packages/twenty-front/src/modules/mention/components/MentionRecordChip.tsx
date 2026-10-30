@@ -1,0 +1,51 @@
+import { getChipLabel } from '@/ui/field/display/utils/getChipLabel';
+import { getLinkToShowPage } from '@/object-metadata/utils/getLinkToShowPage';
+import { AvatarOrIcon } from '@/ui/field/display/components/internal/AvatarOrIcon/AvatarOrIcon';
+import { LinkChip } from '@/ui/navigation/link/components/LinkChip/LinkChip';
+import { t } from '@lingui/core/macro';
+import { isNonEmptyString } from '@sniptt/guards';
+import { Chip } from 'twenty-ui/primitives/data-display';
+import { getAbsoluteImageUrl } from '~/utils/image/getAbsoluteImageUrl';
+
+type MentionRecordChipProps = {
+  recordId: string;
+  objectNameSingular: string;
+  label: string;
+  imageUrl: string;
+};
+
+export const MentionRecordChip = ({
+  recordId,
+  objectNameSingular,
+  label,
+  imageUrl,
+}: MentionRecordChipProps) => {
+  if (!isNonEmptyString(objectNameSingular)) {
+    return <Chip variant="plain" aria-disabled>{t`Unknown object`}</Chip>;
+  }
+
+  if (!isNonEmptyString(recordId)) {
+    return <Chip variant="plain" aria-disabled>{t`Deleted record`}</Chip>;
+  }
+
+  const linkToShowPage = getLinkToShowPage(objectNameSingular, {
+    id: recordId,
+  });
+
+  return (
+    <LinkChip
+      to={linkToShowPage}
+      variant="soft"
+      startElement={
+        <AvatarOrIcon
+          name={label}
+          colorSeed={recordId}
+          shape="circle"
+          src={getAbsoluteImageUrl(imageUrl)}
+        />
+      }
+    >
+      {getChipLabel(label).content}
+    </LinkChip>
+  );
+};

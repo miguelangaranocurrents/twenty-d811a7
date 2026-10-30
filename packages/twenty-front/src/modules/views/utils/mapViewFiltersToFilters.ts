@@ -1,0 +1,53 @@
+import { type RecordFilter } from '@/object-record/record-filter/types/RecordFilter';
+
+import { type FieldMetadataItem } from '@/object-metadata/types/FieldMetadataItem';
+
+import { getRecordFilterTypeAndLabelFromFieldMetadata } from '@/object-record/record-filter/utils/getRecordFilterTypeAndLabelFromFieldMetadata';
+import { type CompositeFieldSubFieldName } from '@/settings/data-model/types/CompositeFieldSubFieldName';
+import { convertViewFilterValueToString, isDefined } from 'twenty-shared/utils';
+import { type ViewFilter as GqlViewFilter } from '~/generated-metadata/graphql';
+import { type ViewFilter } from '@/views/types/ViewFilter';
+
+export const mapViewFiltersToFilters = (
+  viewFilters: ViewFilter[] | GqlViewFilter[],
+  fieldMetadataItems: FieldMetadataItem[],
+): RecordFilter[] => {
+  return viewFilters
+    .map((viewFilter) => {
+      const recordFilterTypeAndLabel =
+        getRecordFilterTypeAndLabelFromFieldMetadata({
+          fieldMetadataId: viewFilter.fieldMetadataId,
+          relationTargetFieldMetadataId:
+            viewFilter.relationTargetFieldMetadataId,
+          fieldMetadataItems,
+        });
+
+      if (!isDefined(recordFilterTypeAndLabel)) {
+        // Todo: we don't throw an error yet as we have race condition on view change
+        return undefined;
+      }
+
+      const operand = viewFilter.operand;
+
+      const stringValue = convertViewFilterValueToString(viewFilter.value);
+
+      return {
+        id: viewFilter.id,
+        fieldMetadataId: viewFilter.fieldMetadataId,
+        value: stringValue,
+        displayValue:
+          'displayValue' in viewFilter && isDefined(viewFilter.displayValue)
+            ? viewFilter.displayValue
+            : stringValue,
+        operand,
+        recordFilterGroupId: viewFilter.viewFilterGroupId ?? undefined,
+        positionInRecordFilterGroup: viewFilter.positionInViewFilterGroup,
+        label: recordFilterTypeAndLabel.label,
+        type: recordFilterTypeAndLabel.type,
+        subFieldName: viewFilter.subFieldName as CompositeFieldSubFieldName,
+        relationTargetFieldMetadataId:
+          viewFilter.relationTargetFieldMetadataId ?? null,
+      } satisfies RecordFilter;
+    })
+    .filter(isDefined);
+};

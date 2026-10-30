@@ -1,0 +1,229 @@
+import { getChipLabel } from '@/ui/field/display/utils/getChipLabel';
+import { useRefetchOnApplicationOperation } from '@/applications/hooks/useRefetchOnApplicationOperation';
+import {
+  SettingsTableCard,
+  type TableItem,
+} from '@/settings/components/SettingsTableCard';
+import { AvatarOrIcon } from '@/ui/field/display/components/internal/AvatarOrIcon/AvatarOrIcon';
+import { LinkChip } from '@/ui/navigation/link/components/LinkChip/LinkChip';
+import { useQuery } from '@apollo/client/react';
+import { styled } from '@linaria/react';
+import { Trans, useLingui } from '@lingui/react/macro';
+import { isNonEmptyString } from '@sniptt/guards';
+import { SettingsPath } from 'twenty-shared/types';
+import { getSettingsPath, isDefined } from 'twenty-shared/utils';
+import { Section } from 'twenty-ui/components/layout';
+import {
+  IconBox,
+  IconDownload,
+  IconTag,
+  IconVersions,
+  IconWorld,
+} from 'twenty-ui/icon';
+import { Chip, Tag } from 'twenty-ui/primitives/data-display';
+import { themeCssVariables } from 'twenty-ui/theme';
+import {
+  type ApplicationRegistration,
+  ApplicationRegistrationSourceType,
+  ApplicationRegistrationTarballUrlDocument,
+  FindOneApplicationSummaryDocument,
+  GetPublicWorkspaceDataByIdDocument,
+} from '~/generated-metadata/graphql';
+import { SettingsApplicationRegistrationShareLinkButtons } from '~/pages/settings/applications/components/SettingsApplicationRegistrationShareLinkButtons';
+import { getAbsoluteImageUrl } from '~/utils/image/getAbsoluteImageUrl';
+
+const StyledSourceRow = styled.div`
+  align-items: center;
+  display: flex;
+  gap: ${themeCssVariables.spacing[1]};
+`;
+
+const StyledDownloadLink = styled.a`
+  color: ${themeCssVariables.font.color.tertiary};
+  cursor: pointer;
+  text-decoration: underline;
+  &:hover {
+    color: ${themeCssVariables.font.color.primary};
+  }
+`;
+
+const StyledGeneralContainer = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: ${themeCssVariables.spacing[2]};
+`;
+
+export const SettingsApplicationRegistrationGeneralInfo = ({
+  registration,
+  isAdminView = false,
+}: {
+  registration: ApplicationRegistration;
+  isAdminView?: boolean;
+}) => {
+  const { t } = useLingui();
+
+  const applicationRegistrationId = registration.id;
+
+  const { data: tarballUrlData } = useQuery(
+    ApplicationRegistrationTarballUrlDocument,
+    {
+      variables: { id: applicationRegistrationId },
+      skip: !applicationRegistrationId,
+    },
+  );
+
+  const { data: applicationSummaryData, refetch: refetchApplicationSummary } =
+    useQuery(FindOneApplicationSummaryDocument, {
+      variables: { universalIdentifier: registration.universalIdentifier },
+      skip: !registration.universalIdentifier,
+    });
+
+  useRefetchOnApplicationOperation({ refetch: refetchApplicationSummary });
+
+  const isApplicationInstalled = isDefined(
+    applicationSummaryData?.findOneApplication,
+  );
+
+  const { data: ownerWorkspaceData } = useQuery(
+    GetPublicWorkspaceDataByIdDocument,
+    {
+      variables: { id: registration.ownerWorkspaceId ?? '' },
+      skip: !registration.ownerWorkspaceId,
+    },
+  );
+
+  const shareLink = getSettingsPath(SettingsPath.AvailableApplicationDetail, {
+    availableApplicationId: registration.universalIdentifier,
+  });
+
+  const ownerWorkspace = ownerWorkspaceData?.getPublicWorkspaceDataById;
+
+  const generateItems = () => {
+    const items: TableItem[] = [
+      {
+        Icon: IconWorld,
+        label: t`Universal ID`,
+        value: registration.universalIdentifier,
+      },
+    ];
+
+    items.push({
+      Icon: IconTag,
+      label: t`Owner`,
+      value: !isDefined(ownerWorkspace?.displayName) ? (
+        <Tag color="orange">{t`Unclaimed`}</Tag>
+      ) : isAdminView && isDefined(registration.ownerWorkspaceId) ? (
+        <LinkChip
+          size="md"
+          variant="soft"
+          to={getSettingsPath(SettingsPath.AdminPanelWorkspaceDetail, {
+            workspaceId: registration.ownerWorkspaceId,
+          })}
+          startElement={
+            <AvatarOrIcon
+              shape="circle"
+              src={getAbsoluteImageUrl(ownerWorkspace?.logo ?? undefined)}
+            />
+          }
+        >
+          {getChipLabel(ownerWorkspace.displayName).content}
+        </LinkChip>
+      ) : (
+        <Chip
+          size="md"
+          variant="soft"
+          startElement={
+            <AvatarOrIcon
+              shape="circle"
+              src={getAbsoluteImageUrl(ownerWorkspace?.logo ?? undefined)}
+            />
+          }
+        >
+          {getChipLabel(ownerWorkspace.displayName).content}
+        </Chip>
+      ),
+    });
+
+    switch (registration.sourceType) {
+      case ApplicationRegistrationSourceType.NPM:
+        items.push({
+          Icon: IconBox,
+          label: t`Package`,
+          value: t`NPM`,
+        });
+        break;
+      case ApplicationRegistrationSourceType.TARBALL:
+        items.push({
+          Icon: IconBox,
+          label: t`Source`,
+          value: isNonEmptyString(
+            tarballUrlData?.applicationRegistrationTarballUrl,
+          ) ? (
+            <StyledSourceRow>
+              <span>{t`Tarball`}</span>
+              <StyledDownloadLink
+                href={tarballUrlData.applicationRegistrationTarballUrl}
+                download
+              >
+                <Trans>Download</Trans>
+              </StyledDownloadLink>
+            </StyledSourceRow>
+          ) : (
+            t`Tarball`
+          ),
+        });
+        break;
+      case ApplicationRegistrationSourceType.LOCAL:
+        items.push({
+          Icon: IconBox,
+          label: t`Source`,
+          value: t`Local`,
+        });
+        break;
+      case ApplicationRegistrationSourceType.OAUTH_ONLY:
+        items.push({
+          Icon: IconBox,
+          label: t`Source`,
+          value: t`OAuth`,
+        });
+        break;
+    }
+
+    if (isNonEmptyString(registration.latestAvailableVersion)) {
+      items.push({
+        Icon: IconVersions,
+        label: t`Latest version`,
+        value: registration.latestAvailableVersion,
+      });
+    }
+
+    items.push({
+      Icon: IconDownload,
+      label: t`Installed`,
+      value: isApplicationInstalled ? (
+        <Tag color="green">{t`Yes`}</Tag>
+      ) : (
+        <Tag color="orange">{t`No`}</Tag>
+      ),
+    });
+
+    return items;
+  };
+
+  return (
+    <Section.Root>
+      <Section.Header title={t`General`} description={t`About your app`} />
+      <StyledGeneralContainer>
+        <SettingsTableCard items={generateItems()} gridAutoColumns="3fr 8fr" />
+        <SettingsApplicationRegistrationShareLinkButtons
+          shareLink={shareLink}
+          isInstalled={isApplicationInstalled}
+          universalIdentifier={registration.universalIdentifier}
+          isNpmSource={
+            registration.sourceType === ApplicationRegistrationSourceType.NPM
+          }
+        />
+      </StyledGeneralContainer>
+    </Section.Root>
+  );
+};

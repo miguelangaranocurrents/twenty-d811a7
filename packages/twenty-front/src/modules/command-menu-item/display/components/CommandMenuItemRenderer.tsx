@@ -1,0 +1,194 @@
+import { type CommandMenuItemDefinition } from '@/command-menu-item/types/CommandMenuItemDefinition';
+import { AppMenuItem } from '@/applications/components/AppMenuItem';
+import { useIsThirdPartyApplication } from '@/applications/hooks/useIsThirdPartyApplication';
+import { CommandMenuContext } from '@/command-menu-item/contexts/CommandMenuContext';
+import { CommandMenuItemButtonHotkeyEffect } from '@/command-menu-item/display/components/CommandMenuItemButtonHotkeyEffect';
+import { CommandListItemLoader } from '@/command-menu-item/display/components/CommandListItemLoader';
+import { CommandMenuDropdownActionItem } from '@/command-menu-item/display/components/CommandMenuDropdownActionItem';
+import { useCommandMenuItemDisplay } from '@/command-menu-item/display/hooks/useCommandMenuItemDisplay';
+import { getCommandMenuItemButtonHotKey } from '@/command-menu-item/display/utils/getCommandMenuItemButtonHotKey';
+import { CommandMenuButton } from '@/command-menu/components/CommandMenuButton';
+import { CommandMenuItem } from '@/command-menu/components/CommandMenuItem';
+import { SelectableListItem } from '@/ui/layout/selectable-list/components/SelectableListItem';
+import { SelectableListComponentInstanceContext } from '@/ui/layout/selectable-list/states/contexts/SelectableListComponentInstanceContext';
+import { isSelectedItemIdComponentFamilyState } from '@/ui/layout/selectable-list/states/isSelectedItemIdComponentFamilyState';
+import { useAvailableComponentInstanceIdOrThrow } from '@/ui/utilities/state/component-state/hooks/useAvailableComponentInstanceIdOrThrow';
+import { useAtomComponentFamilyStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomComponentFamilyStateValue';
+import { styled } from '@linaria/react';
+import { useContext } from 'react';
+import { assertUnreachable, isDefined } from 'twenty-shared/utils';
+
+const StyledPreviewWrapper = styled.div`
+  cursor: not-allowed;
+
+  & * {
+    pointer-events: none;
+  }
+`;
+
+type CommandMenuItemRendererProps = {
+  item: CommandMenuItemDefinition;
+  isPrimaryAction?: boolean;
+  shouldHideLabel?: boolean;
+  shouldShowHotKey?: boolean;
+};
+
+type CommandMenuItemButtonRendererProps = CommandMenuItemRendererProps;
+
+const CommandMenuItemButtonRenderer = ({
+  item,
+  isPrimaryAction = false,
+  shouldHideLabel = false,
+  shouldShowHotKey = false,
+}: CommandMenuItemButtonRendererProps) => {
+  const { isInPreviewMode } = useContext(CommandMenuContext);
+  const {
+    Icon,
+    label,
+    shortLabel,
+    handleClick,
+    disabled,
+    progress,
+    isLoading,
+  } = useCommandMenuItemDisplay(item);
+
+  const command = {
+    key: item.id,
+    label,
+    shortLabel,
+    Icon,
+    hotKeys: item.hotKeys,
+  };
+
+  const buttonHotKey = getCommandMenuItemButtonHotKey(item);
+
+  if (isInPreviewMode) {
+    return (
+      <StyledPreviewWrapper>
+        <CommandMenuButton
+          command={command}
+          hotKey={shouldShowHotKey ? buttonHotKey : undefined}
+          isPrimaryAction={isPrimaryAction}
+          shouldHideLabel={shouldHideLabel}
+        />
+      </StyledPreviewWrapper>
+    );
+  }
+
+  return (
+    <>
+      {isDefined(buttonHotKey) && (
+        <CommandMenuItemButtonHotkeyEffect
+          hotKey={buttonHotKey}
+          disabled={disabled}
+          onHotkeyTriggered={handleClick}
+        />
+      )}
+      <CommandMenuButton
+        command={command}
+        hotKey={shouldShowHotKey ? buttonHotKey : undefined}
+        onClick={disabled ? undefined : handleClick}
+        disabled={disabled}
+        progress={progress}
+        loading={isLoading}
+        isPrimaryAction={isPrimaryAction}
+        shouldHideLabel={shouldHideLabel}
+      />
+    </>
+  );
+};
+
+type CommandMenuItemSelectableRendererProps = Pick<
+  CommandMenuItemRendererProps,
+  'item'
+>;
+
+const CommandMenuItemSelectableRenderer = ({
+  item,
+}: CommandMenuItemSelectableRendererProps) => {
+  const { Icon, label, handleClick, disabled, progress, isLoading } =
+    useCommandMenuItemDisplay(item);
+
+  const selectableListInstanceId = useAvailableComponentInstanceIdOrThrow(
+    SelectableListComponentInstanceContext,
+  );
+
+  const isSelectedItemId = useAtomComponentFamilyStateValue(
+    isSelectedItemIdComponentFamilyState,
+    item.id,
+    selectableListInstanceId,
+  );
+
+  const isThirdPartyApp = useIsThirdPartyApplication(item.applicationId);
+
+  const onItemClick = () => {
+    if (disabled) {
+      return;
+    }
+    handleClick();
+  };
+
+  const loaderComponent = isLoading ? (
+    <CommandListItemLoader progress={progress} />
+  ) : undefined;
+
+  if (isThirdPartyApp) {
+    return (
+      <SelectableListItem itemId={item.id} onEnter={onItemClick}>
+        <AppMenuItem
+          applicationId={item.applicationId}
+          text={label}
+          onClick={disabled ? undefined : handleClick}
+          focused={!disabled && isSelectedItemId}
+          disabled={disabled}
+          RightComponent={loaderComponent}
+        />
+      </SelectableListItem>
+    );
+  }
+
+  return (
+    <SelectableListItem itemId={item.id} onEnter={onItemClick}>
+      <CommandMenuItem
+        id={item.id}
+        Icon={Icon}
+        label={label}
+        onClick={disabled ? undefined : handleClick}
+        hotKeys={item.hotKeys}
+        disabled={disabled}
+        RightComponent={loaderComponent}
+      />
+    </SelectableListItem>
+  );
+};
+
+// oxlint-disable-next-line twenty/effect-components
+export const CommandMenuItemRenderer = ({
+  item,
+  isPrimaryAction,
+  shouldHideLabel,
+  shouldShowHotKey,
+}: CommandMenuItemRendererProps) => {
+  const { displayType } = useContext(CommandMenuContext);
+
+  if (displayType === 'button') {
+    return (
+      <CommandMenuItemButtonRenderer
+        item={item}
+        isPrimaryAction={isPrimaryAction}
+        shouldHideLabel={shouldHideLabel}
+        shouldShowHotKey={shouldShowHotKey}
+      />
+    );
+  }
+
+  if (displayType === 'listItem') {
+    return <CommandMenuItemSelectableRenderer item={item} />;
+  }
+
+  if (displayType === 'dropdownItem') {
+    return <CommandMenuDropdownActionItem item={item} />;
+  }
+
+  return assertUnreachable(displayType, 'Unsupported display type');
+};

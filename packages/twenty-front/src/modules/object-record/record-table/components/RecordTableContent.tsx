@@ -1,0 +1,178 @@
+import { RecordTableColumnWidthEffect } from '@/object-record/record-table/components/RecordTableColumnWidthEffect';
+import { RecordTableScrollAndZIndexEffect } from '@/object-record/record-table/components/RecordTableScrollAndZIndexEffect';
+import {
+  getRecordTableColumnWidthInlineStyles,
+  RecordTableStyleWrapper,
+} from '@/object-record/record-table/components/RecordTableStyleWrapper';
+import { useIsRecordTableCheckboxColumnHidden } from '@/object-record/record-table/hooks/useIsRecordTableCheckboxColumnHidden';
+import { isRecordTableDragColumnHiddenComponentState } from '@/object-record/record-table/states/isRecordTableDragColumnHiddenComponentState';
+import { RecordTableWidthEffect } from '@/object-record/record-table/components/RecordTableWidthEffect';
+import { RecordTableColumnVirtualizationItemsProvider } from '@/object-record/record-table/virtualization/components/RecordTableColumnVirtualizationItemsProvider';
+import { RecordTableColumnVirtualizationEffect } from '@/object-record/record-table/virtualization/components/RecordTableColumnVirtualizationEffect';
+import { RecordTableColumnWidthStyle } from '@/object-record/record-table/components/RecordTableColumnWidthStyle';
+import { getRecordTableHtmlId } from '@/object-record/record-table/utils/getRecordTableHtmlId';
+import { useRecordTableContextOrThrow } from '@/object-record/record-table/contexts/RecordTableContext';
+import { RecordTableNoRecordGroupBody } from '@/object-record/record-table/record-table-body/components/RecordTableNoRecordGroupBody';
+import { RecordTableRecordGroupsBody } from '@/object-record/record-table/record-table-body/components/RecordTableRecordGroupsBody';
+import { RecordTableHeader } from '@/object-record/record-table/record-table-header/components/RecordTableHeader';
+import { useMoveHoverToCurrentCell } from '@/object-record/record-table/record-table-cell/hooks/useMoveHoverToCurrentCell';
+import { RecordSelectionDragSelect } from '@/object-record/record-selection/components/RecordSelectionDragSelect';
+import { recordTableHoverPositionComponentState } from '@/object-record/record-table/states/recordTableHoverPositionComponentState';
+import { recordTableRowIndexByRecordIdComponentSelector } from '@/object-record/record-table/states/selectors/recordTableRowIndexByRecordIdComponentSelector';
+import { isSomeCellInEditModeComponentSelector } from '@/object-record/record-table/states/selectors/isSomeCellInEditModeComponentSelector';
+import { useAtomComponentSelectorCallbackState } from '@/ui/utilities/state/jotai/hooks/useAtomComponentSelectorCallbackState';
+import { useAtomComponentStateCallbackState } from '@/ui/utilities/state/jotai/hooks/useAtomComponentStateCallbackState';
+import { useAtomComponentStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomComponentStateValue';
+import { styled } from '@linaria/react';
+import { useStore } from 'jotai';
+import { isDefined } from 'twenty-shared/utils';
+import { useCallback, useMemo, useRef, useState } from 'react';
+
+const StyledTableContainer = styled.div`
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  position: relative;
+  width: fit-content;
+`;
+
+export interface RecordTableContentProps {
+  tableBodyRef: React.RefObject<HTMLDivElement | null>;
+  handleDragSelectionStart: () => void;
+  handleDragSelectionEnd: () => void;
+  hasRecordGroups: boolean;
+  recordTableId: string;
+}
+
+export const RecordTableContent = ({
+  tableBodyRef,
+  handleDragSelectionStart,
+  handleDragSelectionEnd,
+  hasRecordGroups,
+  recordTableId,
+}: RecordTableContentProps) => {
+  const [isDragging, setIsDragging] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const handleDragStart = () => {
+    setIsDragging(true);
+    handleDragSelectionStart();
+  };
+
+  const handleDragEnd = () => {
+    setIsDragging(false);
+
+    handleDragSelectionEnd();
+  };
+
+  const { visibleRecordFields } = useRecordTableContextOrThrow();
+
+  const store = useStore();
+
+  const recordTableHoverPositionCallbackState =
+    useAtomComponentStateCallbackState(
+      recordTableHoverPositionComponentState,
+      recordTableId,
+    );
+
+  const isSomeCellInEditMode = useAtomComponentSelectorCallbackState(
+    isSomeCellInEditModeComponentSelector,
+    recordTableId,
+  );
+
+  const handleMouseLeave = useCallback(() => {
+    const cellInEditMode = store.get(isSomeCellInEditMode);
+
+    if (!cellInEditMode) {
+      store.set(recordTableHoverPositionCallbackState, null);
+    }
+  }, [store, isSomeCellInEditMode, recordTableHoverPositionCallbackState]);
+
+  const { moveHoverToCurrentCell } = useMoveHoverToCurrentCell(recordTableId);
+
+  const rowIndexByRecordIdCallbackState = useAtomComponentSelectorCallbackState(
+    recordTableRowIndexByRecordIdComponentSelector,
+  );
+
+  const handleDelegatedMouseMove = useCallback(
+    (event: React.MouseEvent) => {
+      const target = event.target as HTMLElement;
+      const cellElement = target.closest<HTMLElement>(
+        '[data-record-table-col]',
+      );
+
+      if (!cellElement) {
+        return;
+      }
+
+      const column = Number(cellElement.dataset.recordTableCol);
+      const recordId = cellElement.dataset.recordTableRecordId;
+
+      const row = isDefined(recordId)
+        ? store.get(rowIndexByRecordIdCallbackState).get(recordId)
+        : undefined;
+
+      if (isNaN(column) || !isDefined(row)) {
+        return;
+      }
+
+      moveHoverToCurrentCell({ column, row });
+    },
+    [moveHoverToCurrentCell, rowIndexByRecordIdCallbackState, store],
+  );
+
+  const isRecordTableDragColumnHidden = useAtomComponentStateValue(
+    isRecordTableDragColumnHiddenComponentState,
+  );
+
+  const isRecordTableCheckboxColumnHidden =
+    useIsRecordTableCheckboxColumnHidden();
+
+  const columnWidthStyles = useMemo(
+    () =>
+      getRecordTableColumnWidthInlineStyles({
+        visibleRecordFields,
+        isDragColumnHidden: isRecordTableDragColumnHidden,
+        isCheckboxColumnHidden: isRecordTableCheckboxColumnHidden,
+      }),
+    [
+      visibleRecordFields,
+      isRecordTableDragColumnHidden,
+      isRecordTableCheckboxColumnHidden,
+    ],
+  );
+
+  return (
+    <StyledTableContainer ref={containerRef}>
+      <RecordTableStyleWrapper
+        ref={tableBodyRef}
+        isDragging={isDragging}
+        style={columnWidthStyles}
+        id={getRecordTableHtmlId(recordTableId)}
+        onMouseMove={handleDelegatedMouseMove}
+        onMouseLeave={handleMouseLeave}
+      >
+        <RecordTableColumnWidthStyle
+          scopeId={getRecordTableHtmlId(recordTableId)}
+        />
+        <RecordTableColumnVirtualizationItemsProvider>
+          <RecordTableHeader />
+          {hasRecordGroups ? (
+            <RecordTableRecordGroupsBody />
+          ) : (
+            <RecordTableNoRecordGroupBody />
+          )}
+        </RecordTableColumnVirtualizationItemsProvider>
+        <RecordTableScrollAndZIndexEffect />
+        <RecordTableColumnVirtualizationEffect />
+        <RecordTableColumnWidthEffect />
+        <RecordTableWidthEffect />
+      </RecordTableStyleWrapper>
+      <RecordSelectionDragSelect
+        selectableItemsContainerRef={containerRef}
+        onDragSelectionStart={handleDragStart}
+        onDragSelectionEnd={handleDragEnd}
+      />
+    </StyledTableContainer>
+  );
+};

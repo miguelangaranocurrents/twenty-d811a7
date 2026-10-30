@@ -1,0 +1,169 @@
+import { ListItemButton } from 'twenty-ui/components/navigation';
+import { useObjectMetadataItemById } from '@/object-metadata/hooks/useObjectMetadataItemById';
+import { availableFieldMetadataItemsForFilterFamilySelector } from '@/object-metadata/states/availableFieldMetadataItemsForFilterFamilySelector';
+import { useUpsertRecordFilterGroup } from '@/object-record/record-filter-group/hooks/useUpsertRecordFilterGroup';
+import { currentRecordFilterGroupsComponentState } from '@/object-record/record-filter-group/states/currentRecordFilterGroupsComponentState';
+import { useUpsertRecordFilter } from '@/object-record/record-filter/hooks/useUpsertRecordFilter';
+import { SelectableListItem } from '@/ui/layout/selectable-list/components/SelectableListItem';
+import { isSelectedItemIdComponentFamilyState } from '@/ui/layout/selectable-list/states/isSelectedItemIdComponentFamilyState';
+import { useAtomComponentFamilyStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomComponentFamilyStateValue';
+import { useAtomComponentSelectorValue } from '@/ui/utilities/state/jotai/hooks/useAtomComponentSelectorValue';
+import { useAtomFamilySelectorValue } from '@/ui/utilities/state/jotai/hooks/useAtomFamilySelectorValue';
+import { VIEW_BAR_FILTER_BOTTOM_MENU_ITEM_IDS } from '@/views/constants/ViewBarFilterBottomMenuItemIds';
+
+import { useChildRecordFiltersAndRecordFilterGroups } from '@/object-record/advanced-filter/hooks/useChildRecordFiltersAndRecordFilterGroups';
+import { useSetRecordFilterUsedInAdvancedFilterDropdownRow } from '@/object-record/advanced-filter/hooks/useSetRecordFilterUsedInAdvancedFilterDropdownRow';
+import { rootLevelRecordFilterGroupComponentSelector } from '@/object-record/advanced-filter/states/rootLevelRecordFilterGroupComponentSelector';
+import { useCreateEmptyRecordFilterFromFieldMetadataItem } from '@/object-record/record-filter/hooks/useCreateEmptyRecordFilterFromFieldMetadataItem';
+import { useRecordIndexContextOrThrow } from '@/object-record/record-index/contexts/RecordIndexContext';
+import { useCloseDropdown } from '@/ui/layout/dropdown/hooks/useCloseDropdown';
+import { useOpenDropdown } from '@/ui/layout/dropdown/hooks/useOpenDropdown';
+import { useAtomComponentStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomComponentStateValue';
+import { useGetCurrentViewOnly } from '@/views/hooks/useGetCurrentViewOnly';
+import { getViewBarAdvancedFilterDropdownId } from '@/views/utils/getViewBarAdvancedFilterDropdownId';
+import { styled } from '@linaria/react';
+import { useLingui } from '@lingui/react/macro';
+import { flushSync } from 'react-dom';
+import { RecordFilterGroupLogicalOperator } from 'twenty-shared/types';
+import { isDefined } from 'twenty-shared/utils';
+import { doNotTranslate } from 'twenty-shared/i18n';
+import { IconFilter } from 'twenty-ui/icon';
+import { Badge } from 'twenty-ui/primitives/data-display';
+import { themeCssVariables } from 'twenty-ui/theme';
+import { v4 } from 'uuid';
+
+const StyledBadgeContainer = styled.span`
+  > span[data-badge-size] {
+    background: ${themeCssVariables.color.blue3};
+    color: ${themeCssVariables.color.blue};
+  }
+`;
+
+export const ViewBarFilterDropdownAdvancedFilterButton = () => {
+  const rootRecordFilterGroup = useAtomComponentSelectorValue(
+    rootLevelRecordFilterGroupComponentSelector,
+  );
+
+  const { childRecordFiltersAndRecordFilterGroups } =
+    useChildRecordFiltersAndRecordFilterGroups({
+      recordFilterGroupId: rootRecordFilterGroup?.id,
+    });
+
+  const advancedFilterQuerySubFilterCount =
+    childRecordFiltersAndRecordFilterGroups.length;
+
+  const { t } = useLingui();
+
+  const isSelectedItemId = useAtomComponentFamilyStateValue(
+    isSelectedItemIdComponentFamilyState,
+    VIEW_BAR_FILTER_BOTTOM_MENU_ITEM_IDS.ADVANCED_FILTER,
+  );
+
+  const { openDropdown: openAdvancedFilterDropdown } = useOpenDropdown();
+
+  const { closeDropdown: closeObjectFilterDropdown } = useCloseDropdown();
+  const { recordIndexId } = useRecordIndexContextOrThrow();
+
+  const { currentView } = useGetCurrentViewOnly();
+
+  const { upsertRecordFilterGroup } = useUpsertRecordFilterGroup();
+
+  const { upsertRecordFilter } = useUpsertRecordFilter();
+
+  const objectMetadataId = currentView?.objectMetadataId;
+
+  if (!objectMetadataId) {
+    throw new Error(
+      doNotTranslate('Object metadata id is missing from current view'),
+    );
+  }
+
+  const { objectMetadataItem } = useObjectMetadataItemById({
+    objectId: objectMetadataId ?? null,
+  });
+
+  const availableFieldMetadataItemsForFilter = useAtomFamilySelectorValue(
+    availableFieldMetadataItemsForFilterFamilySelector,
+    {
+      objectMetadataItemId: objectMetadataItem.id,
+    },
+  );
+
+  const currentRecordFilterGroups = useAtomComponentStateValue(
+    currentRecordFilterGroupsComponentState,
+  );
+
+  const { setRecordFilterUsedInAdvancedFilterDropdownRow } =
+    useSetRecordFilterUsedInAdvancedFilterDropdownRow();
+
+  const { createEmptyRecordFilterFromFieldMetadataItem } =
+    useCreateEmptyRecordFilterFromFieldMetadataItem();
+
+  const handleClick = () => {
+    if (!isDefined(currentView)) {
+      throw new Error(doNotTranslate('Missing current view id'));
+    }
+
+    const alreadyHasAdvancedFilterGroup = currentRecordFilterGroups.length > 0;
+
+    if (!alreadyHasAdvancedFilterGroup) {
+      const defaultFieldMetadataItem =
+        availableFieldMetadataItemsForFilter.find(
+          (fieldMetadataItem) =>
+            fieldMetadataItem.id ===
+            objectMetadataItem?.labelIdentifierFieldMetadataId,
+        ) ?? availableFieldMetadataItemsForFilter[0];
+
+      if (!isDefined(defaultFieldMetadataItem)) {
+        throw new Error(doNotTranslate('Missing default filter definition'));
+      }
+
+      flushSync(() => {
+        const newRecordFilterGroup = {
+          id: v4(),
+          viewId: currentView.id,
+          logicalOperator: RecordFilterGroupLogicalOperator.AND,
+        };
+
+        upsertRecordFilterGroup(newRecordFilterGroup);
+
+        const { newRecordFilter } =
+          createEmptyRecordFilterFromFieldMetadataItem(
+            defaultFieldMetadataItem,
+          );
+
+        newRecordFilter.recordFilterGroupId = newRecordFilterGroup.id;
+
+        upsertRecordFilter(newRecordFilter);
+
+        setRecordFilterUsedInAdvancedFilterDropdownRow(newRecordFilter);
+      });
+    }
+
+    closeObjectFilterDropdown();
+    openAdvancedFilterDropdown({
+      dropdownComponentInstanceIdFromProps:
+        getViewBarAdvancedFilterDropdownId(recordIndexId),
+    });
+  };
+
+  return (
+    <SelectableListItem
+      itemId={VIEW_BAR_FILTER_BOTTOM_MENU_ITEM_IDS.ADVANCED_FILTER}
+      onEnter={handleClick}
+    >
+      <ListItemButton
+        onClick={handleClick}
+        startIcon={<IconFilter />}
+        focused={isSelectedItemId}
+        endIcon={
+          advancedFilterQuerySubFilterCount > 0 ? (
+            <StyledBadgeContainer>
+              <Badge>{advancedFilterQuerySubFilterCount.toString()}</Badge>
+            </StyledBadgeContainer>
+          ) : undefined
+        }
+      >{t`Advanced filter`}</ListItemButton>
+    </SelectableListItem>
+  );
+};

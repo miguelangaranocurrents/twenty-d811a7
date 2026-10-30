@@ -1,0 +1,381 @@
+import { useGetIsMetadataItemCustom } from '@/object-metadata/hooks/useGetIsMetadataItemCustom';
+import { type EnrichedObjectMetadataItem } from '@/object-metadata/types/EnrichedObjectMetadataItem';
+import { getObjectColorWithFallback } from '@/object-metadata/utils/getObjectColorWithFallback';
+import { SettingsOptionCardContentSwitch } from '@/settings/components/SettingsOptions/SettingsOptionCardContentSwitch';
+import { OBJECT_NAME_MAXIMUM_LENGTH } from '@/settings/data-model/constants/ObjectNameMaximumLength';
+import { type SettingsDataModelObjectAboutFormValues } from '@/settings/data-model/validation-schemas/settingsDataModelObjectAboutFormSchema';
+import { IconPicker } from '@/ui/input/components/IconPicker';
+import { SettingsTextInput } from '@/ui/input/components/SettingsTextInput';
+import { TextArea } from '@/ui/input/components/TextArea';
+import { TooltipDelay } from '@/ui/layout/tooltip/constants/TooltipDelay';
+import { styled } from '@linaria/react';
+import { useLingui } from '@lingui/react/macro';
+import { plural } from 'pluralize';
+import { Controller, useFormContext } from 'react-hook-form';
+import { SettingsPath } from 'twenty-shared/types';
+import { capitalize, isDefined } from 'twenty-shared/utils';
+import { InlineBanner } from 'twenty-ui/components/feedback';
+import { IconInfoCircle, IconLink, IconRefresh } from 'twenty-ui/icon';
+import { Collapsible } from 'twenty-ui/primitives/layout';
+import { Card, Tooltip } from 'twenty-ui/primitives/surfaces';
+import { useTheme, themeCssVariables } from 'twenty-ui/theme';
+import { type StringKeyOf } from 'type-fest';
+import { useNavigateSettings } from '~/hooks/useNavigateSettings';
+import { computeMetadataNamesFromLabels } from '@/object-metadata/utils/computeMetadataNamesFromLabels';
+
+type SettingsDataModelObjectAboutFormProps = {
+  disableEdition?: boolean;
+  objectMetadataItem?: EnrichedObjectMetadataItem;
+  onNewDirtyField?: () => void;
+  conflictingObjectMetadataItem?: EnrichedObjectMetadataItem;
+};
+
+const StyledInputsContainer = styled.div`
+  display: flex;
+  gap: ${themeCssVariables.spacing[2]};
+  margin-bottom: ${themeCssVariables.spacing[2]};
+  width: 100%;
+`;
+
+const StyledInputContainer = styled.div`
+  display: flex;
+  flex-direction: column;
+`;
+
+const StyledApiSettingsContainer = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: ${themeCssVariables.spacing[4]};
+  padding-top: ${themeCssVariables.spacing[4]};
+  width: 100%;
+`;
+
+const StyledApiNameInputsContainer = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: ${themeCssVariables.spacing[4]};
+  padding-top: ${themeCssVariables.spacing[4]};
+`;
+
+const StyledLabel = styled.span`
+  color: ${themeCssVariables.font.color.light};
+  font-size: ${themeCssVariables.font.size.xs};
+  font-weight: ${themeCssVariables.font.weight.semiBold};
+  margin-bottom: ${themeCssVariables.spacing[1]};
+`;
+
+const infoCircleElementId = 'info-circle-id';
+
+export const SettingsDataModelObjectAboutForm = ({
+  disableEdition = false,
+  onNewDirtyField,
+  objectMetadataItem,
+  conflictingObjectMetadataItem,
+}: SettingsDataModelObjectAboutFormProps) => {
+  const theme = useTheme();
+  const { control, watch, setValue } =
+    useFormContext<SettingsDataModelObjectAboutFormValues>();
+  const { t } = useLingui();
+  const navigateSettings = useNavigateSettings();
+  const getIsMetadataItemCustom = useGetIsMetadataItemCustom();
+
+  const isLabelSyncedWithName = watch('isLabelSyncedWithName');
+  const labelSingular = watch('labelSingular');
+  const labelPlural = watch('labelPlural');
+  const isStandardObject =
+    isDefined(objectMetadataItem) &&
+    !getIsMetadataItemCustom(objectMetadataItem);
+  const showObjectColorInIconPicker =
+    !isStandardObject &&
+    (!isDefined(objectMetadataItem) ||
+      getIsMetadataItemCustom(objectMetadataItem));
+  watch('description');
+  watch('icon');
+  const objectIconColor = watch('color');
+  const resolvedIconColor = getObjectColorWithFallback({
+    nameSingular: objectMetadataItem?.nameSingular ?? watch('nameSingular'),
+    isSystem: objectMetadataItem?.isSystem ?? false,
+    color: objectIconColor,
+  });
+
+  const fillLabelPlural = (labelSingular: string | undefined) => {
+    if (!isDefined(labelSingular)) return;
+
+    const labelPluralFromSingularLabel = plural(labelSingular);
+    setValue('labelPlural', labelPluralFromSingularLabel, {
+      shouldDirty: true,
+      shouldValidate: true,
+    });
+    if (isLabelSyncedWithName) {
+      fillNamesFromLabels(labelSingular, labelPluralFromSingularLabel);
+    }
+  };
+
+  const fillNamesFromLabels = (
+    currentLabelSingular: string,
+    currentLabelPlural: string,
+  ) => {
+    const { nameSingular, namePlural } = computeMetadataNamesFromLabels(
+      currentLabelSingular,
+      currentLabelPlural,
+    );
+
+    setValue('nameSingular', nameSingular, {
+      shouldDirty: true,
+      shouldValidate: true,
+    });
+    setValue('namePlural', namePlural, {
+      shouldDirty: true,
+      shouldValidate: true,
+    });
+  };
+
+  const descriptionTextAreaId = `${objectMetadataItem?.id}-description`;
+  const labelSingularTextInputId = `${objectMetadataItem?.id}-label-singular`;
+  const labelPluralTextInputId = `${objectMetadataItem?.id}-label-plural`;
+
+  return (
+    <>
+      <StyledInputsContainer>
+        <StyledInputContainer>
+          <StyledLabel>{t`Icon`}</StyledLabel>
+          <Controller
+            name="icon"
+            control={control}
+            defaultValue={objectMetadataItem?.icon ?? 'IconListNumbers'}
+            render={({ field: { onChange, value } }) => (
+              <IconPicker
+                selectedIconKey={value}
+                iconColor={resolvedIconColor}
+                disabled={disableEdition}
+                dropdownId={
+                  isDefined(objectMetadataItem)
+                    ? `settings-object-about-icon-${objectMetadataItem.id}`
+                    : 'settings-new-object-about-icon'
+                }
+                iconColorPicker={
+                  showObjectColorInIconPicker
+                    ? {
+                        selectedColor: resolvedIconColor,
+                        onColorChange: (nextColor) => {
+                          setValue('color', nextColor, {
+                            shouldDirty: true,
+                            shouldValidate: true,
+                          });
+                          onNewDirtyField?.();
+                        },
+                      }
+                    : undefined
+                }
+                onChange={({ iconKey }) => {
+                  if (disableEdition) {
+                    return;
+                  }
+                  onChange(iconKey);
+                  onNewDirtyField?.();
+                }}
+              />
+            )}
+          />
+        </StyledInputContainer>
+        <Controller
+          key={`object-labelSingular-text-input`}
+          name="labelSingular"
+          control={control}
+          defaultValue={objectMetadataItem?.labelSingular ?? ''}
+          render={({ field: { onChange, value }, formState: { errors } }) => (
+            <SettingsTextInput
+              instanceId={labelSingularTextInputId}
+              // TODO we should discuss on how to notify user about form validation schema issue, from now just displaying red borders
+              noErrorHelper={true}
+              error={errors.labelSingular?.message}
+              label={t`Singular`}
+              placeholder={t`Listing`}
+              value={value}
+              onChange={(value) => {
+                onChange(capitalize(value));
+                fillLabelPlural(capitalize(value));
+              }}
+              onBlur={() => onNewDirtyField?.()}
+              disabled={disableEdition}
+              fullWidth
+              maxLength={OBJECT_NAME_MAXIMUM_LENGTH}
+            />
+          )}
+        />
+        <Controller
+          key={`object-labelPlural-text-input`}
+          name="labelPlural"
+          control={control}
+          defaultValue={objectMetadataItem?.labelPlural ?? ''}
+          render={({ field: { onChange, value }, formState: { errors } }) => (
+            <SettingsTextInput
+              instanceId={labelPluralTextInputId}
+              // TODO we should discuss on how to notify user about form validation schema issue, from now just displaying red borders
+              noErrorHelper={true}
+              error={errors.labelPlural?.message}
+              label={t`Plural`}
+              placeholder={t`Listings`}
+              value={value}
+              onChange={(value) => {
+                onChange(capitalize(value));
+                if (isLabelSyncedWithName === true) {
+                  fillNamesFromLabels(labelSingular, capitalize(value));
+                }
+              }}
+              onBlur={() => onNewDirtyField?.()}
+              disabled={disableEdition}
+              fullWidth
+              maxLength={OBJECT_NAME_MAXIMUM_LENGTH}
+            />
+          )}
+        />
+      </StyledInputsContainer>
+      <Controller
+        name="description"
+        control={control}
+        render={({ field: { onChange, value } }) => (
+          <TextArea
+            textAreaId={descriptionTextAreaId}
+            placeholder={t`Write a description`}
+            minRows={4}
+            maxRows={5}
+            value={value ?? undefined}
+            onChange={(nextValue) => onChange(nextValue ?? null)}
+            onBlur={() => onNewDirtyField?.()}
+            disabled={disableEdition}
+          />
+        )}
+      />
+      <StyledApiSettingsContainer>
+        {isDefined(conflictingObjectMetadataItem) && (
+          <InlineBanner
+            status="info"
+            action={
+              <InlineBanner.Action
+                onClick={() =>
+                  navigateSettings(SettingsPath.ObjectDetail, {
+                    objectNamePlural: conflictingObjectMetadataItem.namePlural,
+                  })
+                }
+              >{t`Open`}</InlineBanner.Action>
+            }
+          >{t`An object with this name already exists`}</InlineBanner>
+        )}
+        {!isStandardObject && (
+          <div>
+            <Controller
+              name="isLabelSyncedWithName"
+              control={control}
+              defaultValue={objectMetadataItem?.isLabelSyncedWithName}
+              render={({ field: { onChange, value } }) => (
+                <Card.Root>
+                  <SettingsOptionCardContentSwitch
+                    Icon={IconRefresh}
+                    title={t`Synchronize Objects Labels and API Names`}
+                    description={t`Should changing an object's label also change the API?`}
+                    checked={value ?? true}
+                    disabled={disableEdition}
+                    onChange={(value) => {
+                      onChange(value);
+                      if (value) {
+                        fillNamesFromLabels(labelSingular, labelPlural);
+                      }
+                      onNewDirtyField?.();
+                    }}
+                  />
+                </Card.Root>
+              )}
+            />
+            <Collapsible.Root open={isLabelSyncedWithName === false}>
+              <Collapsible.Panel dimension="height" containAnimation={false}>
+                <StyledApiNameInputsContainer>
+                  {[
+                    {
+                      label: t`API Name (Singular)`,
+                      fieldName:
+                        'nameSingular' as const satisfies StringKeyOf<EnrichedObjectMetadataItem>,
+                      placeholder: `listing`,
+                      defaultValue: objectMetadataItem?.nameSingular ?? '',
+                    },
+                    {
+                      label: t`API Name (Plural)`,
+                      fieldName:
+                        'namePlural' as const satisfies StringKeyOf<EnrichedObjectMetadataItem>,
+                      placeholder: `listings`,
+                      defaultValue: objectMetadataItem?.namePlural ?? '',
+                    },
+                  ].map(({ fieldName, label, placeholder, defaultValue }) => (
+                    <Controller
+                      key={`object-${fieldName}-text-input`}
+                      name={fieldName}
+                      control={control}
+                      defaultValue={defaultValue}
+                      render={({
+                        field: { onChange, value },
+                        formState: { errors },
+                      }) => (
+                        <SettingsTextInput
+                          instanceId={`${objectMetadataItem?.id}-${fieldName}`}
+                          label={label}
+                          placeholder={placeholder}
+                          value={value}
+                          onChange={onChange}
+                          disabled={disableEdition}
+                          fullWidth
+                          maxLength={OBJECT_NAME_MAXIMUM_LENGTH}
+                          onBlur={() => onNewDirtyField?.()}
+                          error={errors[fieldName]?.message}
+                          // TODO we should discuss on how to notify user about form validation schema issue, from now just displaying red borders
+                          noErrorHelper={true}
+                          RightIcon={() => (
+                            <Tooltip
+                              content={t`Input must be in camel case and cannot start with a number`}
+                              sideOffset={5}
+                              side="bottom"
+                              positionMethod="fixed"
+                              delay={TooltipDelay.shortDelay}
+                            >
+                              <IconInfoCircle
+                                id={infoCircleElementId + fieldName}
+                                size={theme.icon.size.md}
+                                color={theme.font.color.tertiary}
+                                style={{ outline: 'none' }}
+                              />
+                            </Tooltip>
+                          )}
+                        />
+                      )}
+                    />
+                  ))}
+                </StyledApiNameInputsContainer>
+              </Collapsible.Panel>
+            </Collapsible.Root>
+          </div>
+        )}
+        {!isDefined(objectMetadataItem) && (
+          <Controller
+            name="skipNameField"
+            control={control}
+            defaultValue={false}
+            render={({ field: { onChange, value } }) => (
+              <Card.Root>
+                <SettingsOptionCardContentSwitch
+                  Icon={IconLink}
+                  title={t`Skip creating a Name field `}
+                  description={t`Useful for pivot/junction tables`}
+                  checked={value ?? false}
+                  disabled={disableEdition}
+                  onChange={(value) => {
+                    onChange(value);
+                    onNewDirtyField?.();
+                  }}
+                />
+              </Card.Root>
+            )}
+          />
+        )}
+      </StyledApiSettingsContainer>
+    </>
+  );
+};

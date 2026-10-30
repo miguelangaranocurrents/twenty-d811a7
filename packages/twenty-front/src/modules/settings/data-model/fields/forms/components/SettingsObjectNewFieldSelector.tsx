@@ -1,0 +1,193 @@
+import { type FieldMetadataItem } from '@/object-metadata/types/FieldMetadataItem';
+import { SettingsCard } from '@/settings/components/SettingsCard';
+import { SETTINGS_FIELD_TYPE_CATEGORIES } from '@/settings/data-model/constants/SettingsFieldTypeCategories';
+import { SETTINGS_FIELD_TYPE_CATEGORY_DESCRIPTIONS } from '@/settings/data-model/constants/SettingsFieldTypeCategoryDescriptions';
+import { SETTINGS_FIELD_TYPE_CATEGORY_LABELS } from '@/settings/data-model/constants/SettingsFieldTypeCategoryLabels';
+import { SETTINGS_FIELD_TYPE_CONFIGS } from '@/settings/data-model/constants/SettingsFieldTypeConfigs';
+import { type SettingsFieldTypeConfig } from '@/settings/data-model/constants/SettingsNonCompositeFieldTypeConfigs';
+import { useBooleanSettingsFormInitialValues } from '@/settings/data-model/fields/forms/boolean/hooks/useBooleanSettingsFormInitialValues';
+import { useCurrencySettingsFormInitialValues } from '@/settings/data-model/fields/forms/currency/hooks/useCurrencySettingsFormInitialValues';
+import { useSelectSettingsFormInitialValues } from '@/settings/data-model/fields/forms/select/hooks/useSelectSettingsFormInitialValues';
+import { type FieldType } from '@/settings/data-model/types/FieldType';
+import { type SettingsFieldType } from '@/settings/data-model/types/SettingsFieldType';
+import { SettingsTextInput } from '@/ui/input/components/SettingsTextInput';
+import { styled } from '@linaria/react';
+import { msg, t } from '@lingui/core/macro';
+import { useLingui } from '@lingui/react/macro';
+import { useState } from 'react';
+import { Controller, useFormContext } from 'react-hook-form';
+import { SettingsPath } from 'twenty-shared/types';
+import { getSettingsPath } from 'twenty-shared/utils';
+import { Section } from 'twenty-ui/components/layout';
+import { IconSearch } from 'twenty-ui/icon';
+import { useTheme, themeCssVariables } from 'twenty-ui/theme';
+import { FieldMetadataType } from '~/generated-metadata/graphql';
+import { type SettingsDataModelFieldTypeFormValues } from '@/settings/data-model/fields/forms/validation-schemas/settingsDataModelFieldTypeFormSchema';
+
+type SettingsObjectNewFieldSelectorProps = {
+  className?: string;
+  excludedFieldTypes?: FieldType[];
+  fieldMetadataItem?: Pick<
+    FieldMetadataItem,
+    'defaultValue' | 'options' | 'type' | 'settings'
+  >;
+
+  objectNamePlural: string;
+};
+
+const StyledTypeSelectContainer = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: inherit;
+  width: 100%;
+`;
+
+const StyledContainer = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  gap: ${themeCssVariables.spacing[2]};
+  justify-content: flex-start;
+  width: 100%;
+`;
+
+const StyledCardContainer = styled.div`
+  display: flex;
+
+  position: relative;
+  width: calc(50% - ${themeCssVariables.spacing[1]});
+`;
+
+const StyledSearchInputContainer = styled.div`
+  width: 100%;
+`;
+
+const StyledFieldTypeIconContainer = styled.span`
+  display: flex;
+  opacity: 0.64;
+`;
+
+export const SettingsObjectNewFieldSelector = ({
+  excludedFieldTypes = [],
+  objectNamePlural,
+}: SettingsObjectNewFieldSelectorProps) => {
+  const theme = useTheme();
+  const { i18n } = useLingui();
+  const { control, setValue } =
+    useFormContext<SettingsDataModelFieldTypeFormValues>();
+  const [searchQuery, setSearchQuery] = useState('');
+  const fieldTypeConfigs = Object.entries<SettingsFieldTypeConfig<any>>(
+    SETTINGS_FIELD_TYPE_CONFIGS,
+  ).filter(
+    ([key, config]) =>
+      !excludedFieldTypes.includes(key as SettingsFieldType) &&
+      i18n._(config.label).toLowerCase().includes(searchQuery.toLowerCase()),
+  );
+
+  const { resetDefaultValueField: resetBooleanDefaultValueField } =
+    useBooleanSettingsFormInitialValues({ existingFieldMetadataId: 'new' });
+
+  const { resetDefaultValueField: resetCurrencyDefaultValueField } =
+    useCurrencySettingsFormInitialValues({ existingFieldMetadataId: 'new' });
+
+  const { resetDefaultValueField: resetSelectDefaultValueField } =
+    useSelectSettingsFormInitialValues({
+      fieldMetadataId: 'new',
+    });
+
+  const resetDefaultValueField = (nextValue: SettingsFieldType) => {
+    switch (nextValue) {
+      case FieldMetadataType.BOOLEAN:
+        resetBooleanDefaultValueField();
+        break;
+      case FieldMetadataType.CURRENCY:
+        resetCurrencyDefaultValueField();
+        break;
+      case FieldMetadataType.SELECT:
+      case FieldMetadataType.MULTI_SELECT:
+        resetSelectDefaultValueField();
+        break;
+      default:
+        break;
+    }
+  };
+
+  return (
+    <>
+      {' '}
+      <Section.Root>
+        <StyledSearchInputContainer>
+          <SettingsTextInput
+            instanceId="new-field-type-search"
+            LeftIcon={IconSearch}
+            placeholder={t`Search a type`}
+            value={searchQuery}
+            onChange={setSearchQuery}
+          />
+        </StyledSearchInputContainer>
+      </Section.Root>
+      <Controller
+        name="type"
+        control={control}
+        render={() => (
+          <StyledTypeSelectContainer>
+            {SETTINGS_FIELD_TYPE_CATEGORIES.map((category) => (
+              <Section.Root key={category}>
+                <Section.Header
+                  title={i18n._(SETTINGS_FIELD_TYPE_CATEGORY_LABELS[category])}
+                  description={i18n._(
+                    SETTINGS_FIELD_TYPE_CATEGORY_DESCRIPTIONS[category],
+                  )}
+                />
+                <StyledContainer>
+                  {fieldTypeConfigs
+                    .filter(([, config]) => config.category === category)
+                    .filter(([key]) => key !== FieldMetadataType.RELATION)
+                    .map(
+                      ([key, config]) =>
+                        [
+                          key,
+                          key === FieldMetadataType.MORPH_RELATION
+                            ? {
+                                ...config,
+                                label: msg({
+                                  message: `Relation`,
+                                  context: 'Field type',
+                                }),
+                              }
+                            : config,
+                        ] as [string, SettingsFieldTypeConfig<any>],
+                    )
+                    .map(([key, config]) => (
+                      <StyledCardContainer key={key}>
+                        <SettingsCard
+                          to={getSettingsPath(
+                            SettingsPath.ObjectNewFieldConfigure,
+                            { objectNamePlural },
+                            { fieldType: key },
+                          )}
+                          onClick={() => {
+                            setValue('type', key as SettingsFieldType);
+                            resetDefaultValueField(key as SettingsFieldType);
+                          }}
+                          key={key}
+                          Icon={
+                            <StyledFieldTypeIconContainer>
+                              <config.Icon
+                                size={theme.icon.size.xl}
+                                stroke={theme.icon.stroke.sm}
+                              />
+                            </StyledFieldTypeIconContainer>
+                          }
+                          title={i18n._(config.label)}
+                        />
+                      </StyledCardContainer>
+                    ))}
+                </StyledContainer>
+              </Section.Root>
+            ))}
+          </StyledTypeSelectContainer>
+        )}
+      />
+    </>
+  );
+};

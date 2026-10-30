@@ -1,0 +1,110 @@
+name: e2e
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  e2e:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      NODE_OPTIONS: "--max-old-space-size=6144"
+      TMPDIR: /home/runner/work/_temp
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis
+        ports:
+          - 6379:6379
+    steps:
+      - name: Free disk space and add swap
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL /usr/local/share/boost
+          sudo fallocate -l 8G /mnt/swapfile2 && sudo chmod 600 /mnt/swapfile2
+          sudo mkswap /mnt/swapfile2 && sudo swapon /mnt/swapfile2
+          free -g && df -h / /mnt
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.18.0
+
+      - name: Install dependencies
+        env:
+          NODE_OPTIONS: ""
+          YARN_CACHE_FOLDER: ${{ runner.temp }}/yarn-cache
+          TMPDIR: ${{ runner.temp }}
+        run: |
+          df -h "$RUNNER_TEMP" .
+          yarn install --immutable
+
+      - name: Build twenty-shared
+        run: npx nx build twenty-shared
+
+      - name: Install Playwright Browsers
+        run: npx nx setup twenty-e2e-testing
+
+      - name: Setup environment files
+        run: |
+          cp packages/twenty-front/.env.example packages/twenty-front/.env
+          npx nx reset:env:e2e-testing-server twenty-server
+
+      - name: Build frontend
+        run: NODE_ENV=production npx nx build twenty-front
+
+      - name: Build server
+        run: npx nx build twenty-server
+
+      - name: Create and setup database
+        run: |
+          PGPASSWORD=postgres psql -h localhost -p 5432 -U postgres -d postgres -c 'CREATE DATABASE "default";'
+          PGPASSWORD=postgres psql -h localhost -p 5432 -U postgres -d postgres -c 'CREATE DATABASE "test";'
+          npx nx run twenty-server:database:reset
+
+      - name: Serve the frontend from the server
+        run: cp -r packages/twenty-front/build packages/twenty-server/dist/front
+
+      - name: Start server
+        run: |
+          npx nx run twenty-server:start:ci > /tmp/server.log 2>&1 &
+          timeout 180 bash -c 'until curl -sf http://localhost:3000/healthz > /dev/null; do sleep 2; done'
+
+      - name: Start worker
+        run: npx nx run twenty-server:worker > /tmp/worker.log 2>&1 &
+
+      - name: Warm up the app
+        run: |
+          for i in 1 2 3; do curl -s -o /dev/null -w "front %{http_code} %{time_total}s\n" http://localhost:3000/; done
+          curl -s -o /dev/null -w "graphql %{http_code} %{time_total}s\n" -X POST -H 'Content-Type: application/json' -d '{"query":"{ __typename }"}' http://localhost:3000/graphql
+          sleep 20
+
+      - name: Run e2e tests
+        working-directory: packages/twenty-e2e-testing
+        env:
+          FRONTEND_BASE_URL: http://localhost:3000
+        run: yarn playwright test --timeout=120000 tests/task-relations-grouped-view.spec.ts
+
+      - name: Upload Playwright results
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-results
+          path: |
+            packages/twenty-e2e-testing/run_results/
+            /tmp/server.log
+            /tmp/worker.log
+          retention-days: 30

@@ -1,0 +1,65 @@
+import { isLayoutCustomizationModeEnabledState } from '@/layout-customization/states/isLayoutCustomizationModeEnabledState';
+import { useNavigateSidePanel } from '@/side-panel/hooks/useNavigateSidePanel';
+import { useSidePanelMenu } from '@/side-panel/hooks/useSidePanelMenu';
+import { isSidePanelOpenedState } from '@/side-panel/states/isSidePanelOpenedState';
+import { sidePanelPageInfoSelector } from '@/side-panel/states/sidePanelPageInfoSelector';
+import { useAtomStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomStateValue';
+import { useLingui } from '@lingui/react/macro';
+import { SidePanelPages } from 'twenty-shared/types';
+import { AnimatedIconCrossfade } from 'twenty-ui/components/layout';
+import { IconPencil, IconX } from 'twenty-ui/icon';
+import { Button } from 'twenty-ui/primitives/input';
+import { useTheme } from 'twenty-ui/theme';
+
+export const CommandMenuItemEditButton = () => {
+  const { t } = useLingui();
+  const theme = useTheme();
+  const { navigateSidePanel } = useNavigateSidePanel();
+  const { closeSidePanelMenu } = useSidePanelMenu();
+
+  const isLayoutCustomizationModeEnabled = useAtomStateValue(
+    isLayoutCustomizationModeEnabledState,
+  );
+  const isSidePanelOpened = useAtomStateValue(isSidePanelOpenedState);
+  const sidePanelPage = useAtomStateValue(sidePanelPageInfoSelector).page;
+
+  const isCommandMenuEditPageActive =
+    isSidePanelOpened && sidePanelPage === SidePanelPages.CommandMenuEdit;
+
+  if (!isLayoutCustomizationModeEnabled) {
+    return null;
+  }
+
+  const handleClick = () => {
+    if (isCommandMenuEditPageActive) {
+      closeSidePanelMenu();
+
+      return;
+    }
+
+    navigateSidePanel({
+      page: SidePanelPages.CommandMenuEdit,
+      pageTitle: t`Edit actions`,
+      pageIcon: IconPencil,
+      resetNavigationStack: true,
+    });
+  };
+
+  return (
+    <Button
+      startIcon={
+        <AnimatedIconCrossfade
+          isActive={isCommandMenuEditPageActive}
+          activeIcon={<IconX size={theme.icon.size.sm} />}
+          inactiveIcon={<IconPencil size={theme.icon.size.sm} />}
+        />
+      }
+      variant="outline"
+      size="sm"
+      onClick={handleClick}
+      aria-expanded={isCommandMenuEditPageActive}
+    >
+      {t`Edit actions`}
+    </Button>
+  );
+};

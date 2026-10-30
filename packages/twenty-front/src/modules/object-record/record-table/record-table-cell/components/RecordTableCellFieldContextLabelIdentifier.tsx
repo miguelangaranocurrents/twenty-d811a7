@@ -1,0 +1,91 @@
+import { getObjectPermissionsForObject } from '@/object-metadata/utils/getObjectPermissionsForObject';
+import { isRecordFieldReadOnly } from '@/object-record/read-only/utils/isRecordFieldReadOnly';
+import { FieldContext } from '@/object-record/record-field/ui/contexts/FieldContext';
+import { useRecordIndexContextOrThrow } from '@/object-record/record-index/contexts/RecordIndexContext';
+import { useGetRecordTableRowIndex } from '@/object-record/record-table/record-table-row/hooks/useGetRecordTableRowIndex';
+import { RecordTableCellContext } from '@/object-record/record-table/contexts/RecordTableCellContext';
+import { useRecordTableContextOrThrow } from '@/object-record/record-table/contexts/RecordTableContext';
+import { useRecordTableRowContextOrThrow } from '@/object-record/record-table/contexts/RecordTableRowContext';
+import { RecordTableUpdateContext } from '@/object-record/record-table/contexts/RecordTableUpdateContext';
+import { isRecordTableCellsNonEditableComponentState } from '@/object-record/record-table/states/isRecordTableCellsNonEditableComponentState';
+import { useAtomComponentStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomComponentStateValue';
+import { useContext, type ReactNode } from 'react';
+import { isDefined } from 'twenty-shared/utils';
+
+type RecordTableCellFieldContextLabelIdentifierProps = {
+  children: ReactNode;
+};
+
+export const RecordTableCellFieldContextLabelIdentifier = ({
+  children,
+}: RecordTableCellFieldContextLabelIdentifierProps) => {
+  const {
+    objectPermissionsByObjectMetadataId,
+    fieldMetadataItemByFieldMetadataItemId,
+    fieldDefinitionByFieldMetadataItemId,
+  } = useRecordIndexContextOrThrow();
+  const { recordId, isRecordReadOnly } = useRecordTableRowContextOrThrow();
+
+  const { getRecordTableRowIndex } = useGetRecordTableRowIndex();
+
+  const isRecordTableCellsNonEditable = useAtomComponentStateValue(
+    isRecordTableCellsNonEditableComponentState,
+  );
+
+  const { recordField } = useContext(RecordTableCellContext);
+  const { objectMetadataItem, onRecordIdentifierClick, triggerEvent } =
+    useRecordTableContextOrThrow();
+
+  const objectPermissions = getObjectPermissionsForObject(
+    objectPermissionsByObjectMetadataId,
+    objectMetadataItem.id,
+  );
+
+  const hasObjectReadPermissions = objectPermissions.canReadObjectRecords;
+
+  const updateRecord = useContext(RecordTableUpdateContext);
+
+  const fieldDefinition =
+    fieldDefinitionByFieldMetadataItemId[recordField.fieldMetadataItemId];
+  const fieldMetadataItem =
+    fieldMetadataItemByFieldMetadataItemId[recordField.fieldMetadataItemId];
+
+  if (!isDefined(fieldMetadataItem)) {
+    return null;
+  }
+
+  const handleChipClick = () => {
+    const rowIndex = getRecordTableRowIndex();
+
+    if (isDefined(rowIndex)) {
+      onRecordIdentifierClick?.(rowIndex, recordId);
+    }
+  };
+
+  return (
+    <FieldContext.Provider
+      value={{
+        recordId,
+        fieldDefinition,
+        useUpdateRecord: updateRecord ? () => [updateRecord, {}] : undefined,
+        isLabelIdentifier: true,
+        displayedMaxRows: 1,
+        isRecordFieldReadOnly:
+          isRecordTableCellsNonEditable ||
+          isRecordFieldReadOnly({
+            isRecordReadOnly: isRecordReadOnly ?? false,
+            objectMetadataId: objectMetadataItem.id,
+            fieldMetadataItem,
+            fieldDefinition,
+            objectPermissionsByObjectMetadataId,
+          }),
+        maxWidth: recordField.size,
+        onRecordChipClick: handleChipClick,
+        isForbidden: !hasObjectReadPermissions,
+        triggerEvent,
+      }}
+    >
+      {children}
+    </FieldContext.Provider>
+  );
+};

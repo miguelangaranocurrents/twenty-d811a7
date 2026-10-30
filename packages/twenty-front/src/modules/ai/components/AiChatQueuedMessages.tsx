@@ -1,0 +1,89 @@
+import { useIsCurrentAiChatThreadReadOnly } from '@/ai/hooks/useIsCurrentAiChatThreadReadOnly';
+import { StyledAiChatContentContainer } from '@/ai/components/StyledAiChatContentContainer';
+import { styled } from '@linaria/react';
+import { plural, t } from '@lingui/core/macro';
+
+import { useDeleteQueuedMessage } from '@/ai/hooks/useDeleteQueuedMessage';
+import { agentChatQueuedMessagesFamilyState } from '@/ai/states/agentChatQueuedMessagesFamilyState';
+import { currentAiChatThreadState } from '@/ai/states/currentAiChatThreadState';
+import { useAtomStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomStateValue';
+import { isDefined } from 'twenty-shared/utils';
+import { LightIconButton } from 'twenty-ui/components/input';
+import { IconX } from 'twenty-ui/icon';
+import { themeCssVariables } from 'twenty-ui/theme';
+import { useAtomFamilyStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomFamilyStateValue';
+
+const StyledQueueContainer = styled(StyledAiChatContentContainer)`
+  display: flex;
+  flex-direction: column;
+  gap: ${themeCssVariables.spacing[1]};
+  padding: 0 ${themeCssVariables.spacing[3]};
+`;
+
+const StyledQueueLabel = styled.div`
+  color: ${themeCssVariables.font.color.light};
+  font-size: ${themeCssVariables.font.size.xs};
+  padding-left: ${themeCssVariables.spacing[1]};
+`;
+
+const StyledQueuedItem = styled.div`
+  align-items: center;
+  background: ${themeCssVariables.background.tertiary};
+  border-radius: ${themeCssVariables.border.radius.sm};
+  color: ${themeCssVariables.font.color.secondary};
+  display: flex;
+  font-size: ${themeCssVariables.font.size.md};
+  gap: ${themeCssVariables.spacing[2]};
+  justify-content: space-between;
+  padding: ${themeCssVariables.spacing[1]} ${themeCssVariables.spacing[2]};
+`;
+
+const StyledQueuedText = styled.span`
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+`;
+
+export const AiChatQueuedMessages = () => {
+  const isReadOnly = useIsCurrentAiChatThreadReadOnly();
+  const currentAiChatThread = useAtomStateValue(currentAiChatThreadState);
+  const agentChatQueuedMessages = useAtomFamilyStateValue(
+    agentChatQueuedMessagesFamilyState,
+    { threadId: currentAiChatThread },
+  );
+  const { deleteQueuedMessage } = useDeleteQueuedMessage();
+
+  if (!isDefined(currentAiChatThread) || agentChatQueuedMessages.length === 0) {
+    return null;
+  }
+
+  return (
+    <StyledQueueContainer>
+      <StyledQueueLabel>
+        {plural(agentChatQueuedMessages.length, {
+          one: '# Queued',
+          other: '# Queued',
+        })}
+      </StyledQueueLabel>
+      {agentChatQueuedMessages.map((message) => {
+        const textPart = message.parts?.find((part) => part.type === 'text');
+        const displayText = textPart && 'text' in textPart ? textPart.text : '';
+
+        return (
+          <StyledQueuedItem key={message.id}>
+            <StyledQueuedText>{displayText}</StyledQueuedText>
+            {!isReadOnly && (
+              <LightIconButton
+                onClick={() => deleteQueuedMessage(message.id)}
+                size="sm"
+                aria-label={t`Remove queued message`}
+              >
+                <IconX />
+              </LightIconButton>
+            )}
+          </StyledQueuedItem>
+        );
+      })}
+    </StyledQueueContainer>
+  );
+};
