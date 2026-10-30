@@ -2,6 +2,8 @@ import { useObjectMetadataItem } from '@/object-metadata/hooks/useObjectMetadata
 import { useFindManyRecords } from '@/object-record/hooks/useFindManyRecords';
 import { useRelevantRecordsGqlFields } from '@/object-record/record-field/hooks/useRelevantRecordsGqlFields';
 import { useFindManyRecordIndexTableParams } from '@/object-record/record-index/hooks/useFindManyRecordIndexTableParams';
+import { recordIndexGroupFieldMetadataItemComponentState } from '@/object-record/record-index/states/recordIndexGroupFieldMetadataComponentState';
+import { useAtomComponentStateValue } from '@/ui/utilities/state/jotai/hooks/useAtomComponentStateValue';
 
 export const useRecordIndexTableQuery = (objectNameSingular: string) => {
   const params = useFindManyRecordIndexTableParams(objectNameSingular);
@@ -10,8 +12,14 @@ export const useRecordIndexTableQuery = (objectNameSingular: string) => {
     objectNameSingular,
   });
 
+  const recordIndexGroupFieldMetadataItem = useAtomComponentStateValue(
+    recordIndexGroupFieldMetadataItemComponentState,
+  );
+
+  // The group filter is matched against cached records, so the group field must be fetched even when hidden
   const recordGqlFields = useRelevantRecordsGqlFields({
     objectMetadataItem,
+    additionalFieldMetadataIds: [recordIndexGroupFieldMetadataItem?.id],
   });
 
   const {
